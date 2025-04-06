@@ -14,3 +14,14 @@ picamera2 library:
 minimal exposure: 0
 maximum exposure: 66666
 ```
+
+```
+sudo rm -rf LCD-show
+git clone https://github.com/goodtft/LCD-show.git
+chmod -R 755 LCD-show
+cd LCD-show/
+sudo ./LCD35-show
+```
+```
+sudo sh -c "echo 2 > /sys/class/thermal/cooling_device0/cur_state"
+```

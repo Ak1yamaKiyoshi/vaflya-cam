@@ -6,7 +6,7 @@ import time
 with open("password.txt", "r+") as f:
     PASSWORD = f.read().strip()
 
-REMOTE = "hex@hex.local"
+REMOTE = "vaflya@vaflya.local"
 
 REMOTE_PATH = "~/Desktop/"
 HOST_PATH = os.path.abspath("./")

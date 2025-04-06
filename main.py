@@ -1,59 +1,69 @@
-import picamera2 as pc2
-import logging
-import time
+from src.camera import Camera, CameraParameters, CamUtils, CameraServer
+
+from src.network.static import StaticHTTPServer
 import cv2 as cv
-import os 
-os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
 
 
-def seconds_to_microseconds(seconds):
-    if seconds is None: return
-    return int(seconds * 1_000_000)
+import time 
+import subprocess
+import os
 
-def microseconds_to_seconds(microseconds):
-    if microseconds is None: return
-    return microseconds / 1_000_000
+def get_ip_addresses():
+    output = subprocess.check_output("hostname -I", shell=True).decode('utf-8').strip()
+    ip_addresses = output.split()
+    return ip_addresses
 
-
-class Config:
-    _camera = pc2.Picamera2()
-    _camera.set_logging(level=logging.CRITICAL  )
-    _cfg = _camera.create_still_configuration(raw={})
-    _camera.configure(_cfg)
-    
-
-    min_gain = _camera.camera_controls["AnalogueGain"][0]
-    max_gain =  _camera.camera_controls["AnalogueGain"][1]
-    min_exposure = _camera.camera_controls["ExposureTime"][0]
-    max_exposue = _camera.camera_controls["ExposureTime"][1]
-    _camera.close()
-
-
-print(Config.max_exposue)
-
-camera = pc2.Picamera2()
-cfg = camera.create_still_configuration(
-    main={"size": (4056, 3040)},
-    raw={}  
+print(get_ip_addresses())
+cam = Camera()
+cam.reconfigure(
+    CameraParameters(22, (3, 3), CamUtils.seconds_to_microseconds(1/16))
 )
-camera.configure(cfg)
 
-camera.set_controls({
-    "AeEnable": False,
-    "AwbEnable": False,
-    "ExposureTime": seconds_to_microseconds(5),
-    "AnalogueGain": 22.0,
-    "ColourGains": (1.81, 2.81) # blue, red 
-})
+def rec(_, params:CameraParameters):
+    cam.reconfigure(params)
 
-camera.start() # camera start should be after setting controls 
+camera_server = CameraServer(callback=rec, callback_capture=cam.capture_and_save, port=4500)
+camera_server.start()
 
-request = camera.capture_request()
-metadata = request.get_metadata()
-
-raw_buffer = request.make_buffer("raw")
-camera.helpers.save_dng(raw_buffer, metadata, cfg["raw"], "outputs/raw_image.dng")
-
-print(metadata)
+static_server = StaticHTTPServer("./src/client", port=4600)
+static_server.start()
 
 
+static_image_server = StaticHTTPServer("./gallery/", port=4800)
+static_image_server.start()
+
+
+os.environ['DISPLAY'] = ":0"
+
+cv.namedWindow("f", cv.WINDOW_NORMAL)
+cv.setWindowProperty("f", cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
+
+try:
+    while True:
+        # todo: a
+        frame = cam.capture(-1)
+        print(frame.metadata)
+
+        cv.imshow("f", frame.frame)    
+        cv.waitKey(100)
+
+except KeyboardInterrupt:    
+    cv.destroyAllWindows()
+
+
+
+
+
+
+""" 
+TODO:
+    in DIsplay display LUX value, shutterspeed as fraction, gain. hz. 
+    make parameters consistent over reboots 
+    image stream to javascript page (http and only then webrtc)
+    gallery accessible from javascipt page or last image taken 
+    more detailed sliders for shutterspeed (current are not clear and difficult to operate)
+
+    remove white borders from imshow. 
+
+
+"""
