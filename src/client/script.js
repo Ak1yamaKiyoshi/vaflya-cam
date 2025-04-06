@@ -1,13 +1,15 @@
 document.addEventListener("DOMContentLoaded", function() {
     const themeSwitch = document.getElementById("theme-switch");
-    const video = document.getElementById('video');
-    const statusElem = document.getElementById('status');
-    const connectBtn = document.getElementById('connect');
     const screenImage = document.getElementById('screen');
+    const video = document.getElementById('video');
+    
+    // Debug - check if screen element exists
+    console.log("Screen element:", screenImage);
     
     const serverAddress = 'vaflya.local';
-    const serverPort = 4500;
+    const serverPort = 5000;  // Using your image server port
     
+    // Theme switcher logic
     themeSwitch.addEventListener("change", function() {
         if(this.checked) {
             document.body.classList.remove("dark-theme");
@@ -26,36 +28,17 @@ document.addEventListener("DOMContentLoaded", function() {
         document.body.classList.remove("dark-theme");
         document.body.classList.add("light-theme");
     }
-
-    function setupSlider(id, displayId) {
-        let slider = document.getElementById(id);
-        let display = document.getElementById(displayId);
-
-        if(slider && display) {
-            slider.addEventListener("input", () => {
-                display.innerText = Number(slider.value).toFixed(2);
-                console.log(id + ": " + slider.value);
-            });
-        }
-    }
-
-    // setupSlider("explosure", "explosureVal");
-    // setupSlider("gain", "gainVal");
-    // setupSlider("redGain", "redGainVal");
-    // setupSlider("blueGain", "blueGainVal");
-    // setupSlider("shutterSpeed1", "shutterSpeed1Val");
-    // setupSlider("shutterSpeed2", "shutterSpeed2Val");
-
-    const redGain = document.getElementById("redGain")
+    
+    // Control event listeners
+    const redGain = document.getElementById("redGain");
     redGain.addEventListener("change", async () => {
         const redGainValue = redGain.value;
         document.getElementById("redGainVal").textContent = redGainValue;
         const payload = {
             value: redGainValue
-        }
-
+        };
         try {
-            const response = await fetch('http://vaflya.local:4500/red_gain', {
+            const response = await fetch(`http://${serverAddress}:4500/red_gain`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -67,16 +50,15 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
-    const blueGain = document.getElementById("blueGain")
+    const blueGain = document.getElementById("blueGain");
     blueGain.addEventListener("change", async () => {
         const blueGainValue = blueGain.value;
         document.getElementById("blueGainVal").textContent = blueGainValue;
         const payload = {
             value: blueGainValue
-        }
-
+        };
         try {
-            const response = await fetch('http://vaflya.local:4500/blue_gain', {
+            const response = await fetch(`http://${serverAddress}:4500/blue_gain`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -88,18 +70,15 @@ document.addEventListener("DOMContentLoaded", function() {
         }
     });
 
-
-
-    const analogueGain = document.getElementById("gain")
+    const analogueGain = document.getElementById("gain");
     analogueGain.addEventListener("change", async () => {
         const gainValue = analogueGain.value;
         document.getElementById("gainVal").textContent = gainValue;
         const payload = {
             value: gainValue
-        }
-
+        };
         try {
-            const response = await fetch('http://vaflya.local:4500/analogue_gain', {
+            const response = await fetch(`http://${serverAddress}:4500/analogue_gain`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -110,18 +89,16 @@ document.addEventListener("DOMContentLoaded", function() {
             console.error("Request failed:", error);
         }
     });
-
 
     const exposure = document.getElementById("shutterSpeed1");
     exposure.addEventListener("change", async () => {
         const exposureValue = exposure.value;
-        document.getElementById("shutterSpeed1Val").textContent = exposureValue;
         const payload = {
-            value: Math.floor(exposureValue * 1_000_000)
+            value: Math.log(exposureValue*0.3 + 1) * 1_000_000
         };
-    
+        document.getElementById("shutterSpeed1Val").textContent = payload.value.toFixed(0);
         try {
-            const response = await fetch('http://vaflya.local:4500/exposure_time', {
+            const response = await fetch(`http://${serverAddress}:4500/exposure_time`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -132,43 +109,12 @@ document.addEventListener("DOMContentLoaded", function() {
             console.error("Request failed:", error);
         }
     });
-
-    const exposure2 = document.getElementById("shutterSpeed2");
-    exposure.addEventListener("change", async () => {
-        const exposureValue2 = exposure2.value;
-        document.getElementById("shutterSpeed2Val").textContent = exposureValue2;
-        const payload = {
-            value: Math.floor(exposureValue2 * 1_000_000)
-        };
-
-        try {
-            const response = await fetch('http://vaflya.local:4500/exposure_time', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(payload),
-            });
-        } catch (error) {
-            console.error("Request failed:", error);
-        }
-    });
-
-
-    
-
-    // const resolutionSelect = document.getElementById("resolution");
-    // if (resolutionSelect) {
-    //     resolutionSelect.addEventListener("change", function() {
-    //         console.log("Resolution: " + this.value);
-    //     });
-    //
 
     const captureButton = document.getElementById("capture");
     if (captureButton) {
         captureButton.addEventListener("click", async function() {
             try {
-                const response = await fetch('http://vaflya.local:4500/capture', {
+                const response = await fetch(`http://${serverAddress}:4500/capture`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -180,4 +126,98 @@ document.addEventListener("DOMContentLoaded", function() {
         });
     }
     
+    // Image streaming setup
+    let frameCount = 0;
+    let dataSize = 0;
+    let latency = 0;
+
+    // Show the image element, hide video
+    video.style.display = 'none';
+    screenImage.style.display = 'block';
+
+    // Utility function to decompress data if needed
+    function decompressData(compressedData) {
+        try {
+            const binaryString = atob(compressedData);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            return bytes;
+        } catch (e) {
+            console.error('Error decompressing:', e);
+            return null;
+        }
+    }
+
+    let fetchInProgress = false;
+    const maxFPS = 25;
+    const minFrameTime = 1000 / maxFPS;
+    let lastFrameTime = 0;
+    let lastFetchTime = Date.now();
+
+    function scheduleFetch() {
+        const now = Date.now();
+        const elapsed = now - lastFrameTime;
+        const delay = Math.max(0, minFrameTime - elapsed);
+        setTimeout(fetchImage, delay);
+    }
+
+    function checkFetchTimeout() {
+        const now = Date.now();
+        const timeSinceLastFetch = now - lastFetchTime;
+        
+        // If no fetch in the last 2 seconds and no fetch is currently in progress, trigger a new fetch
+        if (timeSinceLastFetch > 2000 && !fetchInProgress) {
+            console.log("Connection timeout, attempting to reconnect...");
+            fetchImage();
+        }
+        
+        setTimeout(checkFetchTimeout, 1000);
+    }
+
+    checkFetchTimeout();
+
+    function fetchImage() {
+        if (fetchInProgress) {
+            return;
+        }
+        
+        fetchInProgress = true;
+        lastFrameTime = Date.now();
+        const startTime = Date.now();
+        
+        fetch(`http://${serverAddress}:${serverPort}/c?${startTime}`)
+            .then(r => {
+                return r.text();
+            })
+            .then(encodedData => {
+                console.log("Received data, first 40 chars:", encodedData.substring(0, 40));
+                
+                if (encodedData.startsWith('data:image')) {
+                    screenImage.src = encodedData;
+                } else {
+                    // Fallback if the data isn't already in the expected format
+                    screenImage.src = encodedData;
+                }
+
+                dataSize += encodedData.length;
+                frameCount++;
+                latency = Date.now() - startTime;
+                
+                fetchInProgress = false;
+                lastFetchTime = Date.now(); // Update the last fetch time
+                scheduleFetch();
+            })
+            .catch(err => {
+                console.error('Fetch error:', err);
+                fetchInProgress = false;
+                lastFetchTime = Date.now(); // Update even on error to prevent immediate retries on persistent errors
+                setTimeout(fetchImage, 500);
+            });
+    }
+
+    // Start fetching images
+    fetchImage();
 });

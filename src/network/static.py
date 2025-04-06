@@ -36,7 +36,4 @@ class StaticHTTPServer:
     
     def __del__(self):
         self.close()
-        #try:
-        #    self.server_thread.join()
-        #except:
-        #    pass
+        self.server_thread.join()

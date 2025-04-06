@@ -13,18 +13,21 @@ class HttpImageDisplay:
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            # Add CORS headers to all responses
+            self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")  # Allow all origins
+            self.send_header("Access-Control-Allow-Methods", "GET")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+            
             if self.path.startswith("/c"):
-                self.send_response(200)
                 self.send_header("Content-type", "text/plain")
-                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
                 self.end_headers()
 
                 with HttpImageDisplay.content_lock:
                     self.wfile.write(HttpImageDisplay.content.encode())
             else:
-                self.send_response(200)
                 self.send_header("Content-type", "text/html")
-                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
                 self.end_headers()
 
                 html = """
@@ -96,7 +99,7 @@ class HttpImageDisplay:
 
                 let fetchInProgress = false;
                 let latency = 0;
-                const maxFPS = 25;
+                const maxFPS = 15;
                 const minFrameTime = 1000 / maxFPS;
                 let lastFrameTime = 0;
                 let lastFetchTime = Date.now(); // Track when the last fetch completed

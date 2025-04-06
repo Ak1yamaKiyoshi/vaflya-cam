@@ -2,7 +2,7 @@ import os
 os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
 
 from .types import CameraFrameWrapper, CameraParameters
-from .utils import FrameList, Config
+from .utils import FrameList, Config, CamUtils
 
 import picamera2 as pc2
 import threading
@@ -22,8 +22,8 @@ class Camera:
 
         self.frames = FrameList(2)
 
-        self._params_latest = CameraParameters(1, (2.25, 3.25), 1/64)
-        self._params_request = CameraParameters(1, (2.25, 3.25), 1/64)
+        self._params_latest = CameraParameters(1, (2.25, 3.25), CamUtils.seconds_to_microseconds(1/64))
+        self._params_request = CameraParameters(1, (2.25, 3.25), CamUtils.seconds_to_microseconds(1/64))
         self._frame_not_captured = threading.Event()
         self.reconfigure(self._params_request)
 

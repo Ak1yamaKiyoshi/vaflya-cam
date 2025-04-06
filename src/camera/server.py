@@ -87,7 +87,7 @@ class CameraParameterHandler(BaseHTTPRequestHandler):
 
             updated_params = dataclasses.asdict(self.camera_params)
             changed = False
-            
+
             if path == 'analogue_gain' and 'value' in data:
                 self.camera_params.analogue_gain = float(data['value'])
                 updated_params['analogue_gain'] = self.camera_params.analogue_gain
@@ -116,6 +116,8 @@ class CameraParameterHandler(BaseHTTPRequestHandler):
                 self.camera_params.exposure_time = int(data['value'])
                 updated_params['exposure_time'] = self.camera_params.exposure_time
                 changed = True
+                print(path, data)
+                print(self.camera_params.exposure_time)
                 
             elif path == 'resolution' and 'width' in data and 'height' in data:
                 self.camera_params.resolution = (int(data['width']), int(data['height']))
@@ -137,7 +139,7 @@ class CameraParameterHandler(BaseHTTPRequestHandler):
                     self.camera_params.resolution = (int(data['width']), int(data['height']))
                 changed = True
                 updated_params = dataclasses.asdict(self.camera_params)
-                
+
             elif path == "capture":
                 if self.capture_callback is not None:
                     self.capture_callback()
@@ -151,7 +153,7 @@ class CameraParameterHandler(BaseHTTPRequestHandler):
                 return
             
             if changed and self.param_callback:
-                self.param_callback(self.camera_params)        
+                self.param_callback(self.camera_params, path)        
     
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
