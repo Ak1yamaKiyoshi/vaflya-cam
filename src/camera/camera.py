@@ -1,4 +1,5 @@
 import os
+
 os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
 
 from .types import CameraFrameWrapper, CameraParameters, RuntimeFrameMetadata
@@ -15,17 +16,20 @@ import time
 from datetime import datetime
 
 
-
 class Camera:
     def __init__(self):
         self.cfg = Config()
-        self._cam = pc2.Picamera2()  
+        self._cam = pc2.Picamera2()
         self._cam.pre_callback = self._on_frame
 
         self.frames = FrameList(2)
 
-        self._params_latest = CameraParameters(1, (2.25, 3.25), CamUtils.seconds_to_microseconds(1/64))
-        self._params_request = CameraParameters(7, (2.25, 3.25), CamUtils.seconds_to_microseconds(1/64))
+        self._params_latest = CameraParameters(
+            1, (2.25, 3.25), CamUtils.seconds_to_microseconds(1 / 64)
+        )
+        self._params_request = CameraParameters(
+            7, (2.25, 3.25), CamUtils.seconds_to_microseconds(1 / 64)
+        )
         self._frame_not_captured = threading.Event()
         self.reconfigure(self._params_request)
 
@@ -35,17 +39,17 @@ class Camera:
             frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
             frame_metadata = request.get_metadata()
-            
+
             params = CameraParameters(
-                analogue_gain=frame_metadata['AnalogueGain'],
-                exposure_time=frame_metadata['ExposureTime'],
-                colour_gains=frame_metadata['ColourGains'],
-                resolution=frame.shape[:2][::-1]
+                analogue_gain=frame_metadata["AnalogueGain"],
+                exposure_time=frame_metadata["ExposureTime"],
+                colour_gains=frame_metadata["ColourGains"],
+                resolution=frame.shape[:2][::-1],
             )
 
             runtime_meta = RuntimeFrameMetadata(
-                lux=frame_metadata['Lux'],
-                temperature=frame_metadata['ColourTemperature']
+                lux=frame_metadata["Lux"],
+                temperature=frame_metadata["ColourTemperature"],
             )
 
             self.frames.add(
@@ -53,7 +57,7 @@ class Camera:
                     frame=frame,
                     metadata=params,
                     timestamp=time.monotonic(),
-                    runtime_metadata=runtime_meta 
+                    runtime_metadata=runtime_meta,
                 )
             )
 
@@ -65,22 +69,27 @@ class Camera:
 
         self._cam.stop()
         cfg = self._cam.create_still_configuration(
-            main={"size": params.resolution},
-            raw={"size": params.resolution}
+            main={"size": params.resolution}, raw={"size": params.resolution}
         )
 
         self._cam.configure(cfg)
 
-        exposure_time = int(params.exposure_time) if isinstance(params.exposure_time, float) else params.exposure_time
+        exposure_time = (
+            int(params.exposure_time)
+            if isinstance(params.exposure_time, float)
+            else params.exposure_time
+        )
 
-        self._cam.set_controls({
-            "AeEnable": False,
-            "AwbEnable": False,
-            "ExposureTime": exposure_time,
-            "AnalogueGain": params.analogue_gain,
-            "ColourGains": params.colour_gains,
-            "NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast,
-        })
+        self._cam.set_controls(
+            {
+                "AeEnable": False,
+                "AwbEnable": False,
+                "ExposureTime": exposure_time,
+                "AnalogueGain": params.analogue_gain,
+                "ColourGains": params.colour_gains,
+                "NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast,
+            }
+        )
 
         self._cam.start()
 
@@ -90,17 +99,11 @@ class Camera:
             self._frame_not_captured.clear()
 
         return self.frames.get(seconds_ago)
-    
-    def capture_and_save(self, output_path="gallery/", seconds_ago=-1):
 
-        print("SAVE ")        
+    def capture_and_save(self, output_path="gallery/", seconds_ago=-1):
         now = datetime.now()
         formatted_time = now.strftime("%Y.%m.%d-%H:%M:%S") + ".png"
         frame = self.capture(seconds_ago)
-        path = os.path.join(output_path, formatted_time)    
-        print(path)
-    
+        path = os.path.join(output_path, formatted_time)
+
         cv.imwrite(path, frame.frame)
-
-
-

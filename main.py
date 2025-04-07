@@ -1,110 +1,79 @@
-from src.camera import Camera, CameraParameters, CamUtils, CameraServer, CameraFrameWrapper
+from src.camera import (
+    Camera,
+    CameraParameters,
+    CameraParameter,
+    CamUtils,
+    CameraServer,
+    CameraFrameWrapper,
+)
 from src.camera.server import CameraParameterHandler
 
 from src.network.static import StaticHTTPServer
-from src.network.video_display import HttpImageDisplay
+from src.network.image import ImageStream
 import cv2 as cv
 import dataclasses
-
-
 import numpy as np
-import os
-import signal
-import psutil
-
-import time 
+import time
 import subprocess
 import os
 
-def get_ip_addresses():
-    output = subprocess.check_output("hostname -I", shell=True).decode('utf-8').strip()
-    ip_addresses = output.split()
-    return ip_addresses
 
-address = get_ip_addresses()[0]
+def rec(_, params_req: CameraParameter):
+    params = dataclasses.replace(cam._params_request)
+    print(params_req)
 
-cam = Camera()
+    if params_req.name == "analogue_gain":
+        params.analogue_gain = params_req.value
 
+    elif params_req.name == "exposure_time":
+        params.exposure_time = params_req.value
 
+    elif params_req.name == "blue_gain":
+        params.colour_gains = params.colour_gains[0], params_req.value
 
-def kill_process_on_port(port):
-    for proc in psutil.process_iter(['pid', 'name', 'connections']):
-        try:
-            for conn in proc.connections():
-                if conn.laddr.port == port:
-                    os.kill(proc.pid, signal.SIGTERM)
-                    print(f"Killed process {proc.pid} ({proc.name()}) using port {port}")
-                    return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-    return False
+    elif params_req.name == "red_gain":
+        params.colour_gains = params_req.value, params.colour_gains[1]
 
-def rec(_, params_req:CameraParameters, typo):
-    print(params_req, typo)
-    
-    params:CameraParameters = dataclasses.replace(cam._params_request)
-    if typo == "analogue_gain":
-        params.analogue_gain = params_req.analogue_gain
-    elif typo == "exposure_time":
-        params.exposure_time = params_req.exposure_time
-    elif typo == 'red_gain':     
-        params.colour_gains = (params_req.colour_gains[0], params.colour_gains[1])
-    elif typo == 'blue_gain':
-        params.colour_gains = (params.colour_gains[0], params_req.colour_gains[1])
-
-    params = params_req
-    print(f"SET: {params}")
-    # 2484906
-    if params.exposure_time == 2484906:
-        
-        print(f"RESET EXPOSUE: {cam._params_latest.exposure_time}")
-        params.exposure_time = cam._params_latest.exposure_time
-    print(f"RESETTED: {params}")
     cam.reconfigure(params)
 
 
-CamUtils.seconds_to_microseconds
-
-kill_process_on_port(4500)
-kill_process_on_port(4600)
-kill_process_on_port(4800)
-
-camera_server = CameraServer(callback=rec, callback_capture=cam.capture_and_save, port=4500)
-camera_server.start()
-
-static_server = StaticHTTPServer("./src/client", port=4600)
-static_server.start()
+def get_ip_addresses():
+    output = subprocess.check_output("hostname -I", shell=True).decode("utf-8").strip()
+    ip_addresses = output.split()
+    return ip_addresses
 
 
-static_image_server = StaticHTTPServer("./gallery/", port=4800)
-static_image_server.start()
+address = get_ip_addresses()[0]
+cam = Camera()
 
-image_display = HttpImageDisplay(5000, jpeg_quality=100)
-image_display.start()
+servers = [
+    (
+        "Camera configuration server",
+        CameraServer(callback=rec, callback_capture=cam.capture_and_save, port=4500),
+    ),
+    ("Camera controls frontend", StaticHTTPServer("./src/client", port=4600)),
+    ("Gallery", StaticHTTPServer("./gallery/", port=4800)),
+    ("Image stream", ImageStream(5000)),
+]
+image_display: ImageStream = servers[-1][1]
 
-os.environ['DISPLAY'] = ":0"
+
+os.environ["DISPLAY"] = ":0"
 
 cv.namedWindow("f", cv.WINDOW_NORMAL)
 cv.setWindowProperty("f", cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
 
 
-def prepare_for_display(self):
-    pass
-
-
 prev_darkened = None
 try:
     while True:
-        # todo: a
-        CameraParameterHandler.camera_params.analogue_gain = cam._params_request.analogue_gain
-        CameraParameterHandler.camera_params.exposure_time = cam._params_request.exposure_time
-        CameraParameterHandler.camera_params.colour_gains = cam._params_request.colour_gains
-
         # 320 x 480
         frame: CameraFrameWrapper = cam.capture(-1)
         lores = cv.resize(frame.frame, (426, 320), interpolation=cv.INTER_LANCZOS4)
-        
-        # cross cfg 
+
+        CameraParameterHandler.camera_params = cam._params_latest
+
+        # cross cfg
         line_length = 8
         crop_line_lenght = 4
         thickness = 1
@@ -114,9 +83,12 @@ try:
         margin = 10
         h, w = frame.frame.shape[:2]
         cx, cy = w // 2, h // 2
-        crop = frame.frame[cy - pad_side // 2: cy + pad_side // 2, cx - pad_side // 2: cx + pad_side // 2]
+        crop = frame.frame[
+            cy - pad_side // 2 : cy + pad_side // 2,
+            cx - pad_side // 2 : cx + pad_side // 2,
+        ]
 
-        # get most contrast color 
+        # get most contrast color
         crop_color = np.mean(crop, axis=(0, 1)).astype(np.uint8)
 
         r, g, b = crop_color[0], crop_color[1], crop_color[2]
@@ -126,32 +98,48 @@ try:
             color = (0, 0, 0)
         else:
             color = (255, 255, 255)
-        
+
         # Calculate sharpnesss
         crop_gray = cv.cvtColor(crop, cv.COLOR_BGR2GRAY)
         g1 = cv.blur(crop_gray, (13, 13))
         edge_map = cv.absdiff(crop_gray, g1)
         sharpness = np.mean(edge_map)
-        
-        # draw cross on crop 
+
+        # draw cross on crop
         h, w = crop.shape[:2]
         cx, cy = w // 2, h // 2
-        cv.line(crop, (cx - crop_line_lenght, cy), (cx + crop_line_lenght, cy), color, thickness)
-        cv.line(crop, (cx, cy - crop_line_lenght), (cx, cy + crop_line_lenght), color, thickness)
+        cv.line(
+            crop,
+            (cx - crop_line_lenght, cy),
+            (cx + crop_line_lenght, cy),
+            color,
+            thickness,
+        )
+        cv.line(
+            crop,
+            (cx, cy - crop_line_lenght),
+            (cx, cy + crop_line_lenght),
+            color,
+            thickness,
+        )
 
-        # draw cross and cxcy 
+        # draw cross and cxcy
         h, w = lores.shape[:2]
         cx, cy = w // 2, h // 2
 
         cv.line(lores, (cx - line_length, cy), (cx + line_length, cy), color, thickness)
         cv.line(lores, (cx, cy - line_length), (cx, cy + line_length), color, thickness)
 
-        # pad left with black 
-        lores= cv.copyMakeBorder(lores, 0, 0, 480-426, 0, cv.BORDER_CONSTANT, value=[0, 0, 0])
+        # pad left with black
+        lores = cv.copyMakeBorder(
+            lores, 0, 0, 480 - 426, 0, cv.BORDER_CONSTANT, value=[0, 0, 0]
+        )
 
         # paste gires crop to lores
         lores_h, lores_w = lores.shape[:2]
-        lores[lores_h - pad_side - margin:lores_h - margin, margin:margin + pad_side] = crop
+        lores[
+            lores_h - pad_side - margin : lores_h - margin, margin : margin + pad_side
+        ] = crop
 
         # text
         font = cv.FONT_HERSHEY_SIMPLEX
@@ -162,7 +150,7 @@ try:
         start_y = 30
 
         hz = len(cam.frames._list) / cam.frames._capacity
-        
+
         text_items = [
             f"{address}",
             f"sharpness {sharpness:.1f}",
@@ -170,22 +158,32 @@ try:
             f"shutter {CamUtils.microseconds_to_seconds(frame.metadata.exposure_time):.7f}",
             f"lux: {frame.runtime_metadata.lux}",
             f"temperature: {frame.runtime_metadata.temperature}",
-            f"frames per second: {hz:3.1f}"
+            f"frames per second: {hz:3.1f}",
         ]
 
         for i, text in enumerate(text_items):
             y = start_y + (i * line_height)
-            cv.putText(lores, text, (start_x + shadow_offset, y + shadow_offset), 
-                    font, font_scale, (0, 0, 0), 2)
-            cv.putText(lores, text, (start_x, y), 
-                    font, font_scale, (255, 255, 255), 1)
-        
-        image_display.upd(lores)
+            cv.putText(
+                lores,
+                text,
+                (start_x + shadow_offset, y + shadow_offset),
+                font,
+                font_scale,
+                (0, 0, 0),
+                2,
+            )
+            cv.putText(lores, text, (start_x, y), font, font_scale, (255, 255, 255), 1)
+
+        image_display.input_image(lores)
         cv.imshow("f", lores)
         cv.waitKey(100)
 
-except KeyboardInterrupt:    
+except KeyboardInterrupt:
     cv.destroyAllWindows()
+
+finally:
+    for _, server in servers:
+        server.stop()
 
 """ 
 Todo: 

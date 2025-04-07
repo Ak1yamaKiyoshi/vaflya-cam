@@ -1,15 +1,6 @@
 document.addEventListener("DOMContentLoaded", function() {
     const themeSwitch = document.getElementById("theme-switch");
-    const screenImage = document.getElementById('screen');
-    const video = document.getElementById('video');
-    
-    // Debug - check if screen element exists
-    console.log("Screen element:", screenImage);
-    
     const serverAddress = 'vaflya.local';
-    const serverPort = 5000;  // Using your image server port
-    
-    // Theme switcher logic
     themeSwitch.addEventListener("change", function() {
         if(this.checked) {
             document.body.classList.remove("dark-theme");
@@ -29,7 +20,6 @@ document.addEventListener("DOMContentLoaded", function() {
         document.body.classList.add("light-theme");
     }
     
-    // Control event listeners
     const redGain = document.getElementById("redGain");
     redGain.addEventListener("change", async () => {
         const redGainValue = redGain.value;
@@ -125,99 +115,5 @@ document.addEventListener("DOMContentLoaded", function() {
             }
         });
     }
-    
-    // Image streaming setup
-    let frameCount = 0;
-    let dataSize = 0;
-    let latency = 0;
 
-    // Show the image element, hide video
-    video.style.display = 'none';
-    screenImage.style.display = 'block';
-
-    // Utility function to decompress data if needed
-    function decompressData(compressedData) {
-        try {
-            const binaryString = atob(compressedData);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            
-            return bytes;
-        } catch (e) {
-            console.error('Error decompressing:', e);
-            return null;
-        }
-    }
-
-    let fetchInProgress = false;
-    const maxFPS = 25;
-    const minFrameTime = 1000 / maxFPS;
-    let lastFrameTime = 0;
-    let lastFetchTime = Date.now();
-
-    function scheduleFetch() {
-        const now = Date.now();
-        const elapsed = now - lastFrameTime;
-        const delay = Math.max(0, minFrameTime - elapsed);
-        setTimeout(fetchImage, delay);
-    }
-
-    function checkFetchTimeout() {
-        const now = Date.now();
-        const timeSinceLastFetch = now - lastFetchTime;
-        
-        // If no fetch in the last 2 seconds and no fetch is currently in progress, trigger a new fetch
-        if (timeSinceLastFetch > 2000 && !fetchInProgress) {
-            console.log("Connection timeout, attempting to reconnect...");
-            fetchImage();
-        }
-        
-        setTimeout(checkFetchTimeout, 1000);
-    }
-
-    checkFetchTimeout();
-
-    function fetchImage() {
-        if (fetchInProgress) {
-            return;
-        }
-        
-        fetchInProgress = true;
-        lastFrameTime = Date.now();
-        const startTime = Date.now();
-        
-        fetch(`http://${serverAddress}:${serverPort}/c?${startTime}`)
-            .then(r => {
-                return r.text();
-            })
-            .then(encodedData => {
-                console.log("Received data, first 40 chars:", encodedData.substring(0, 40));
-                
-                if (encodedData.startsWith('data:image')) {
-                    screenImage.src = encodedData;
-                } else {
-                    // Fallback if the data isn't already in the expected format
-                    screenImage.src = encodedData;
-                }
-
-                dataSize += encodedData.length;
-                frameCount++;
-                latency = Date.now() - startTime;
-                
-                fetchInProgress = false;
-                lastFetchTime = Date.now(); // Update the last fetch time
-                scheduleFetch();
-            })
-            .catch(err => {
-                console.error('Fetch error:', err);
-                fetchInProgress = false;
-                lastFetchTime = Date.now(); // Update even on error to prevent immediate retries on persistent errors
-                setTimeout(fetchImage, 500);
-            });
-    }
-
-    // Start fetching images
-    fetchImage();
 });
