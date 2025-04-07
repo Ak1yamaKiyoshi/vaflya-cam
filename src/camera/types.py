@@ -14,7 +14,13 @@ class CameraParameters:
     resolution: Tuple[float, float] = 2028, 1520
 
 @dataclasses.dataclass
+class RuntimeFrameMetadata:
+    lux: float 
+    temperature: float     
+
+@dataclasses.dataclass
 class CameraFrameWrapper:
     frame: np.ndarray
     metadata: CameraParameters
     timestamp: float 
+    runtime_metadata: RuntimeFrameMetadata

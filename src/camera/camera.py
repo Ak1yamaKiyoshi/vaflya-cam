@@ -1,8 +1,10 @@
 import os
 os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
 
-from .types import CameraFrameWrapper, CameraParameters
+from .types import CameraFrameWrapper, CameraParameters, RuntimeFrameMetadata
 from .utils import FrameList, Config, CamUtils
+
+from libcamera import controls
 
 import picamera2 as pc2
 import threading
@@ -23,7 +25,7 @@ class Camera:
         self.frames = FrameList(2)
 
         self._params_latest = CameraParameters(1, (2.25, 3.25), CamUtils.seconds_to_microseconds(1/64))
-        self._params_request = CameraParameters(1, (2.25, 3.25), CamUtils.seconds_to_microseconds(1/64))
+        self._params_request = CameraParameters(7, (2.25, 3.25), CamUtils.seconds_to_microseconds(1/64))
         self._frame_not_captured = threading.Event()
         self.reconfigure(self._params_request)
 
@@ -33,6 +35,7 @@ class Camera:
             frame = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
 
             frame_metadata = request.get_metadata()
+            
             params = CameraParameters(
                 analogue_gain=frame_metadata['AnalogueGain'],
                 exposure_time=frame_metadata['ExposureTime'],
@@ -40,11 +43,17 @@ class Camera:
                 resolution=frame.shape[:2][::-1]
             )
 
+            runtime_meta = RuntimeFrameMetadata(
+                lux=frame_metadata['Lux'],
+                temperature=frame_metadata['ColourTemperature']
+            )
+
             self.frames.add(
                 CameraFrameWrapper(
                     frame=frame,
                     metadata=params,
-                    timestamp=time.monotonic()
+                    timestamp=time.monotonic(),
+                    runtime_metadata=runtime_meta 
                 )
             )
 
@@ -57,7 +66,7 @@ class Camera:
         self._cam.stop()
         cfg = self._cam.create_still_configuration(
             main={"size": params.resolution},
-            raw={}
+            raw={"size": params.resolution}
         )
 
         self._cam.configure(cfg)
@@ -70,10 +79,11 @@ class Camera:
             "ExposureTime": exposure_time,
             "AnalogueGain": params.analogue_gain,
             "ColourGains": params.colour_gains,
+            "NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast,
         })
 
         self._cam.start()
-    
+
     def capture(self, seconds_ago=-1):
         if seconds_ago == -1:
             self._frame_not_captured.wait()
