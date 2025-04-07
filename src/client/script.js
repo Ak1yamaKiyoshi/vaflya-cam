@@ -1,6 +1,10 @@
 document.addEventListener("DOMContentLoaded", function() {
     const themeSwitch = document.getElementById("theme-switch");
-    const serverAddress = 'vaflya.local';
+    const serverAddress = window.location.protocol + '//' + window.location.hostname
+    console.log(serverAddress)
+
+    document.getElementById("screen").src = `${serverAddress}:5000/video.mjpg`;
+
     themeSwitch.addEventListener("change", function() {
         if(this.checked) {
             document.body.classList.remove("dark-theme");
@@ -67,8 +71,9 @@ document.addEventListener("DOMContentLoaded", function() {
         const payload = {
             value: gainValue
         };
+        console.log(`${serverAddress}:4500/analogue_gain`)
         try {
-            const response = await fetch(`http://${serverAddress}:4500/analogue_gain`, {
+            const response = await fetch(`${serverAddress}:4500/analogue_gain`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -88,7 +93,7 @@ document.addEventListener("DOMContentLoaded", function() {
         };
         document.getElementById("shutterSpeed1Val").textContent = payload.value.toFixed(0);
         try {
-            const response = await fetch(`http://${serverAddress}:4500/exposure_time`, {
+            const response = await fetch(`${serverAddress}:4500/exposure_time`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -104,7 +109,7 @@ document.addEventListener("DOMContentLoaded", function() {
     if (captureButton) {
         captureButton.addEventListener("click", async function() {
             try {
-                const response = await fetch(`http://${serverAddress}:4500/capture`, {
+                const response = await fetch(`${serverAddress}:4500/capture`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
