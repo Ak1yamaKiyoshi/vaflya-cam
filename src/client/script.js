@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", function() {
             value: redGainValue
         };
         try {
-            const response = await fetch(`http://${serverAddress}:4500/red_gain`, {
+            const response = await fetch(`${serverAddress}:4500/red_gain`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -52,7 +52,7 @@ document.addEventListener("DOMContentLoaded", function() {
             value: blueGainValue
         };
         try {
-            const response = await fetch(`http://${serverAddress}:4500/blue_gain`, {
+            const response = await fetch(`${serverAddress}:4500/blue_gain`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
