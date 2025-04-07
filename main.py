@@ -55,6 +55,10 @@ servers = [
     ("Gallery", StaticHTTPServer("./gallery/", port=4800)),
     ("Image stream", ImageStream(5000)),
 ]
+
+for _, server in servers:
+    server.start()
+    
 image_display: ImageStream = servers[-1][1]
 
 
@@ -63,6 +67,7 @@ os.environ["DISPLAY"] = ":0"
 cv.namedWindow("f", cv.WINDOW_NORMAL)
 cv.setWindowProperty("f", cv.WND_PROP_FULLSCREEN, cv.WINDOW_FULLSCREEN)
 
+print("got there")
 
 prev_darkened = None
 try:
