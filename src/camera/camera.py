@@ -84,6 +84,7 @@ class Camera:
             {
                 "AeEnable": False,
                 "AwbEnable": False,
+                # AwbModeEnum
                 "ExposureTime": exposure_time,
                 "AnalogueGain": params.analogue_gain,
                 "ColourGains": params.colour_gains,

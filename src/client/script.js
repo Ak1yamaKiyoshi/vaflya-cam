@@ -89,7 +89,7 @@ document.addEventListener("DOMContentLoaded", function() {
     exposure.addEventListener("change", async () => {
         const exposureValue = exposure.value;
         const payload = {
-            value: Math.log(exposureValue*0.3 + 1) * 1_000_000
+            value: Math.log(exposureValue*0.02 + 1) * 1_000_000
         };
         document.getElementById("shutterSpeed1Val").textContent = payload.value.toFixed(0);
         try {
