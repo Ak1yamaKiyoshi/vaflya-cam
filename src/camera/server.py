@@ -7,6 +7,7 @@ from urllib.parse import parse_qs
 
 import threading
 from .types import CameraParameters, CameraParameter
+from .camera import Camera
 
 
 logging.basicConfig(
@@ -17,8 +18,7 @@ logger = logging.getLogger("camera-server")
 
 
 class CameraParameterHandler(BaseHTTPRequestHandler):
-    camera_params = None
-    param_callback = None
+    camera: Camera
     capture_callback = None
 
     def _send_cors_headers(self):
@@ -45,13 +45,13 @@ class CameraParameterHandler(BaseHTTPRequestHandler):
                 return
 
             if path == "analogue_gain":
-                value = self.camera_params.analogue_gain
+                value = self.camera._params_latest.analogue_gain
             elif path == "colour_gains":
-                value = self.camera_params.colour_gains
+                value = self.camera._params_latest.colour_gains
             elif path == "exposure_time":
-                value = self.camera_params.exposure_time
+                value = self.camera._params_latest.exposure_time
             elif path == "resolution":
-                value = self.camera_params.resolution
+                value = self.camera._params_latest.resolution
             else:
                 self.send_response(404)
                 self.send_header("Content-Type", "application/json")
@@ -81,46 +81,42 @@ class CameraParameterHandler(BaseHTTPRequestHandler):
             content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length).decode("utf-8")
 
-            requested_parameter = None
-
             try:
                 data = json.loads(post_data)
             except json.JSONDecodeError:
                 form_data = parse_qs(post_data)
                 data = {k: v[0] for k, v in form_data.items()} if form_data else {}
+            try:
+                latest = self.camera._params_latest
+                if path == "analogue_gain" and "value" in data:
+                    latest.analogue_gain = float(data['value'])
 
-            print(path, data)
+                elif path == "red_gain" and "value" in data:
+                    gains = latest.colour_gains 
+                    latest.colour_gains = gains[0], float(data["value"])
 
-            if path == "analogue_gain" and "value" in data:
-                requested_parameter = CameraParameter(
-                    "analogue_gain", float(data["value"])
-                )
+                elif path == "blue_gain" and "value" in data:
+                    gains = latest.colour_gains 
+                    latest.colour_gains = float(data["value"]), gains[1]
 
-            elif path == "red_gain" and "value" in data:
-                requested_parameter = CameraParameter("red_gain", float(data["value"]))
+                elif path == "exposure_time" and "value" in data:
+                    latest.exposure_time = float(data['value'])
 
-            elif path == "blue_gain" and "value" in data:
-                requested_parameter = CameraParameter("blue_gain", float(data["value"]))
+                elif path == "capture":
+                    if self.capture_callback is not None:
+                        self.capture_callback()
 
-            elif path == "exposure_time" and "value" in data:
-                requested_parameter = CameraParameter(
-                    "exposure_time", int(data["value"])
-                )
+                else:
+                    self.send_response(404)
+                    self.send_header("Content-Type", "application/json")
+                    self._send_cors_headers()
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": "Parameter not found"}).encode())
+                    return
 
-            elif path == "capture":
-                if self.capture_callback is not None:
-                    self.capture_callback()
-
-            else:
-                self.send_response(404)
-                self.send_header("Content-Type", "application/json")
-                self._send_cors_headers()
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "Parameter not found"}).encode())
-                return
-
-            if requested_parameter is not None and self.param_callback:
-                self.param_callback(requested_parameter)
+                self.camera.reconfigure(latest)
+            except Exception as e:
+                print(e)
 
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -139,28 +135,20 @@ class CameraParameterHandler(BaseHTTPRequestHandler):
 class CameraServer:
     def __init__(
         self,
+        camera: Camera, 
         host="0.0.0.0",
         port=8081,
-        callback: Callable[[CameraParameters], None] = None,
         callback_capture=None,
     ):
         self.host = host
         self.port = port
         self.server = None
-        self.param_callback = callback
+        self.camera = camera
         self.capture_callback = callback_capture
 
-        self.camera_params = CameraParameters(
-            analogue_gain=1.0,
-            colour_gains=(1.0, 1.0),
-            exposure_time=10000,  #
-            resolution=(2028, 1520),
-        )
-
     def start(self):
-        CameraParameterHandler.camera_params = self.camera_params
-        CameraParameterHandler.param_callback = self.param_callback
         CameraParameterHandler.capture_callback = self.capture_callback
+        CameraParameterHandler.camera = self.camera
 
         self.server = HTTPServer((self.host, self.port), CameraParameterHandler)
 

@@ -18,25 +18,6 @@ import subprocess
 import os
 
 
-def rec(_, params_req: CameraParameter):
-    params = dataclasses.replace(cam._params_request)
-    print(params_req)
-
-    if params_req.name == "analogue_gain":
-        params.analogue_gain = params_req.value
-
-    elif params_req.name == "exposure_time":
-        params.exposure_time = params_req.value
-
-    elif params_req.name == "blue_gain":
-        params.colour_gains = params.colour_gains[0], params_req.value
-
-    elif params_req.name == "red_gain":
-        params.colour_gains = params_req.value, params.colour_gains[1]
-
-    cam.reconfigure(params)
-
-
 def get_ip_addresses():
     output = subprocess.check_output("hostname -I", shell=True).decode("utf-8").strip()
     ip_addresses = output.split()
@@ -46,10 +27,11 @@ def get_ip_addresses():
 address = get_ip_addresses()[0]
 cam = Camera()
 
+time.sleep(0.1)
 servers = [
     (
         "Camera configuration server",
-        CameraServer(callback=rec, callback_capture=cam.capture_and_save, port=4500),
+        CameraServer(camera=cam, callback_capture=cam.capture_and_save, port=4500),
     ),
     ("Camera controls frontend", StaticHTTPServer("./src/client", port=4600)),
     ("Gallery", StaticHTTPServer("./gallery/", port=4800)),

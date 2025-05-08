@@ -94,14 +94,14 @@ class Camera:
 
         self._cam.start()
 
-    def capture(self, seconds_ago=-1):
+    def capture(self, seconds_ago=0.1):
         if seconds_ago == -1:
             self._frame_not_captured.wait()
             self._frame_not_captured.clear()
 
         return self.frames.get(seconds_ago)
 
-    def capture_and_save(self, output_path="gallery/", seconds_ago=-1):
+    def capture_and_save(self, output_path="gallery/", seconds_ago=0.1):
         now = datetime.now()
         formatted_time = now.strftime("%Y.%m.%d-%H:%M:%S") + ".png"
         frame = self.capture(seconds_ago)
