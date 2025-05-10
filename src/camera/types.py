@@ -12,20 +12,19 @@ class CameraParameters:
     analogue_gain: float
     colour_gains: Tuple[float, float]
     exposure_time: int
-    resolution: Tuple[float, float] = 2028, 1520
-
+    resolution: Tuple[float, float] = 4056, 3040
+    AeEnable: bool = False
+    AwbEnable: bool = False
 
 @dataclasses.dataclass
 class CameraParameter:
     name: Literal["analogue_gain", "red_gain", "blue_gain", "exposure_time"]
     value: Union[float, int]
 
-
 @dataclasses.dataclass
 class RuntimeFrameMetadata:
     lux: float
     temperature: float
-
 
 @dataclasses.dataclass
 class CameraFrameWrapper:

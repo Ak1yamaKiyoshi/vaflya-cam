@@ -64,6 +64,15 @@ class Camera:
             self._params_latest = params
             self._frame_not_captured.set()
 
+    def set_auto(self):
+        self._cam.stop()
+        self._cam.set_controls({
+                "AeEnable": True,
+                "AwbEnable": True,
+        })
+        self._cam.start()
+    
+        
     def reconfigure(self, params: CameraParameters):
         self._params_request = params
 
@@ -71,7 +80,6 @@ class Camera:
         cfg = self._cam.create_still_configuration(
             main={"size": params.resolution}, raw={"size": params.resolution}
         )
-
         self._cam.configure(cfg)
 
         exposure_time = (
@@ -82,13 +90,13 @@ class Camera:
 
         self._cam.set_controls(
             {
-                "AeEnable": False,
-                "AwbEnable": False,
+                "AeEnable": params.AeEnable,
+                "AwbEnable": params.AwbEnable,
                 # AwbModeEnum
                 "ExposureTime": exposure_time,
                 "AnalogueGain": params.analogue_gain,
                 "ColourGains": params.colour_gains,
-                "NoiseReductionMode": controls.draft.NoiseReductionModeEnum.Fast,
+                "NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality,
             }
         )
 
