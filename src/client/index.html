@@ -86,36 +86,6 @@
             font-size: 18px;
         }
         
-        .theme-slider {
-            flex: 1;
-            height: 5px;
-            appearance: none;
-            background: linear-gradient(to right, #3f3f9c, #fc8f00);
-            outline: none;
-            border-radius: 10px;
-        }
-        
-        .theme-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: white;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-        }
-        
-        .theme-slider::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
-            border: none;
-            border-radius: 50%;
-            background: white;
-            cursor: pointer;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-        }
-        
         .control-item {
             margin-bottom: 30px;
         }
@@ -296,8 +266,10 @@
                     viewport-width="250" 
                     multiplier="6" 
                     min-value="1" 
-                    max-value="22" 
-                    tick-density="128"></custom-slider>
+                    max-value="22"
+                    logarithmic="true"  
+                    tick-density="128"
+                    data-param="analogue_gain"></custom-slider>
             </div>
             
             <div class="control-item">
@@ -307,8 +279,10 @@
                     viewport-width="250" 
                     multiplier="6" 
                     min-value="1" 
-                    max-value="10" 
-                    tick-density="128"></custom-slider>
+                    max-value="10"
+                    logarithmic="true"  
+                    tick-density="128"
+                    data-param="red_gain"></custom-slider>
             </div>
             
             <div class="control-item">
@@ -319,19 +293,22 @@
                     multiplier="6" 
                     min-value="1" 
                     max-value="10" 
-                    tick-density="128"></custom-slider>
+                    logarithmic="true" 
+                    tick-density="128"
+                    data-param="blue_gain"></custom-slider>
             </div>
             
             <div class="control-item">
                 <label>Shutter Speed: <span id="shutterSpeed1Val" class="value-display">0.00114</span></label>
                 <custom-slider 
                     id="shutterSpeed1"
-                    viewport-width="250" 
+                    viewport-width="500" 
                     multiplier="23" 
                     min-value="0.01" 
                     max-value="3200000.0" 
-                    exponential="true" 
-                    tick-density="128"></custom-slider>
+                    logarithmic="true" 
+                    tick-density="128"
+                    data-param="exposure_time"></custom-slider>
             </div>
             
             <button id="capture" class="capture-btn">
@@ -353,328 +330,211 @@
                     }, delay);
                 };
             }
-        
-            const themeSwitch = document.getElementById("theme-switch");
-            const autoModeBtn = document.getElementById("auto-mode");
-            const serverAddress = window.location.protocol + '//' + window.location.hostname;
-            console.log(serverAddress);
-        
-            document.getElementById("screen").src = `${serverAddress}:5000/video.mjpg`;
-        
-            themeSwitch.addEventListener("change", function() {
-                if(this.checked) {
+            
+            const API = {
+                baseUrl: window.location.protocol + '//' + window.location.hostname + ':4500',
+                videoUrl: window.location.protocol + '//' + window.location.hostname + ':5000/video.mjpg',
+                endpoints: {
+                    params: '/params',
+                    autoMode: '/auto_mode',
+                    capture: '/capture'
+                },
+                RATE_LIMIT_DELAY: 300
+            };
+            
+            const state = {
+                isAutoMode: false
+            };
+            
+            const elements = {
+                themeSwitch: document.getElementById("theme-switch"),
+                autoModeBtn: document.getElementById("auto-mode"),
+                screen: document.getElementById("screen"),
+                sliders: document.querySelectorAll("custom-slider"),
+                capture: document.getElementById("capture"),
+                valueDisplays: {}
+            };
+            
+            elements.sliders.forEach(slider => {
+                const id = slider.id;
+                const displayId = id + "Val";
+                elements.valueDisplays[id] = document.getElementById(displayId);
+            });
+            
+            elements.screen.src = API.videoUrl;
+            
+            function initTheme() {
+                const savedTheme = localStorage.getItem("theme");
+                if(savedTheme === "light") {
+                    elements.themeSwitch.checked = true;
                     document.body.classList.remove("dark-theme");
                     document.body.classList.add("light-theme");
-                    localStorage.setItem("theme", "light");
-                } else {
-                    document.body.classList.remove("light-theme");
-                    document.body.classList.add("dark-theme");
-                    localStorage.setItem("theme", "dark");
-                }
-            });
-        
-            const savedTheme = localStorage.getItem("theme");
-            if(savedTheme === "light") {
-                themeSwitch.checked = true;
-                document.body.classList.remove("dark-theme");
-                document.body.classList.add("light-theme");
-            }
-            
-            let isAutoMode = false;
-            
-            autoModeBtn.addEventListener("click", async function() {
-                isAutoMode = !isAutoMode;
-                
-                if(isAutoMode) {
-                    autoModeBtn.classList.add("active");
-                    try {
-                        const response = await fetch(`${serverAddress}:4500/auto_mode`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ enabled: true }),
-                        });
-                        
-                        if (response.ok) {
-                            initCameraParameters();
-                        }
-                    } catch (error) {
-                        console.error("Failed to enable auto mode:", error);
-                        isAutoMode = false;
-                        autoModeBtn.classList.remove("active");
-                    }
-                } else {
-                    autoModeBtn.classList.remove("active");
-                    try {
-                        const response = await fetch(`${serverAddress}:4500/auto_mode`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({ enabled: false }),
-                        });
-                    } catch (error) {
-                        console.error("Failed to disable auto mode:", error);
-                    }
-                }
-            });
-            
-            const RATE_LIMIT_DELAY = 300;
-            
-            const redGain = document.getElementById("redGain");
-            const blueGain = document.getElementById("blueGain");
-            const analogueGain = document.getElementById("gain");
-            const exposure = document.getElementById("shutterSpeed1");
-            const redGainVal = document.getElementById("redGainVal");
-            const blueGainVal = document.getElementById("blueGainVal");
-            const gainVal = document.getElementById("gainVal");
-            const shutterSpeedVal = document.getElementById("shutterSpeed1Val");
-            
-            async function initCameraParameters() {
-                try {
-                    const response = await fetch(`${serverAddress}:4500/params`);
-                    const cameraParams = await response.json();
-                    console.log("Initial camera parameters:", cameraParams);
-                    
-                    if (cameraParams.colour_gains && cameraParams.colour_gains.length >= 2) {
-                        const blueGainValue = cameraParams.colour_gains[0];
-                        if (blueGain && blueGain.updateValue) {
-                            blueGain.updateValue(blueGainValue);
-                        }
-                        if (blueGainVal) {
-                            blueGainVal.textContent = blueGainValue;
-                        }
-                        
-                        const redGainValue = cameraParams.colour_gains[1];
-                        if (redGain && redGain.updateValue) {
-                            redGain.updateValue(redGainValue);
-                        }
-                        if (redGainVal) {
-                            redGainVal.textContent = redGainValue;
-                        }
-                    }
-                    
-                    if (typeof cameraParams.analogue_gain !== 'undefined') {
-                        const analogueGainValue = cameraParams.analogue_gain;
-                        if (analogueGain && analogueGain.updateValue) {
-                            analogueGain.updateValue(analogueGainValue);
-                        }
-                        if (gainVal) {
-                            gainVal.textContent = analogueGainValue;
-                        }
-                    }
-                    
-                    if (typeof cameraParams.exposure_time !== 'undefined') {
-                        const exposureTime = cameraParams.exposure_time;
-                        const sliderValue = exposureTime
-                        
-                        if (exposure && exposure.updateValue) {
-                            exposure.updateValue(sliderValue);
-                        }
-                        if (shutterSpeedVal) {
-                            shutterSpeedVal.textContent = exposureTime.toFixed(0);
-                        }
-                    }
-                    
-                    if (typeof cameraParams.auto_mode !== 'undefined') {
-                        isAutoMode = cameraParams.auto_mode;
-                        if (isAutoMode) {
-                            autoModeBtn.classList.add("active");
-                        } else {
-                            autoModeBtn.classList.remove("active");
-                        }
-                    }
-                    
-                } catch (error) {
-                    console.error("Failed to fetch initial camera parameters:", error);
-                }
-            }
-            
-            // Call the initialization function
-            initCameraParameters();
-            
-            // Red Gain with rate limiting
-            const sendRedGainUpdate = debounce(async (value) => {
-                // Don't send updates if in auto mode
-                if (isAutoMode) return;
-                
-                const payload = { value: value };
-                try {
-                    await fetch(`${serverAddress}:4500/red_gain`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(payload),
-                    });
-                } catch (error) {
-                    console.error("Request failed:", error);
-                }
-            }, RATE_LIMIT_DELAY);
-            
-            redGain.addEventListener("slider-change", (e) => {
-                const redGainValue = e.detail.value;
-                redGainVal.textContent = redGainValue;
-                
-                // If in auto mode, disable it when user manually adjusts a setting
-                if (isAutoMode) {
-                    isAutoMode = false;
-                    autoModeBtn.classList.remove("active");
-                    fetch(`${serverAddress}:4500/auto_mode`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ enabled: false }),
-                    }).catch(error => {
-                        console.error("Failed to disable auto mode:", error);
-                    });
                 }
                 
-                sendRedGainUpdate(redGainValue);
-            });
-        
-            // Blue Gain with rate limiting
-            const sendBlueGainUpdate = debounce(async (value) => {
-                // Don't send updates if in auto mode
-                if (isAutoMode) return;
-                
-                const payload = { value: value };
-                try {
-                    await fetch(`${serverAddress}:4500/blue_gain`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(payload),
-                    });
-                } catch (error) {
-                    console.error("Request failed:", error);
-                }
-            }, RATE_LIMIT_DELAY);
-            
-            blueGain.addEventListener("slider-change", (e) => {
-                const blueGainValue = e.detail.value;
-                blueGainVal.textContent = blueGainValue;
-                
-                // If in auto mode, disable it when user manually adjusts a setting
-                if (isAutoMode) {
-                    isAutoMode = false;
-                    autoModeBtn.classList.remove("active");
-                    fetch(`${serverAddress}:4500/auto_mode`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ enabled: false }),
-                    }).catch(error => {
-                        console.error("Failed to disable auto mode:", error);
-                    });
-                }
-                
-                sendBlueGainUpdate(blueGainValue);
-            });
-        
-            // Analogue Gain with rate limiting
-            const sendAnalogueGainUpdate = debounce(async (value) => {
-                // Don't send updates if in auto mode
-                if (isAutoMode) return;
-                
-                const payload = { value: value };
-                try {
-                    await fetch(`${serverAddress}:4500/analogue_gain`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(payload),
-                    });
-                } catch (error) {
-                    console.error("Request failed:", error);
-                }
-            }, RATE_LIMIT_DELAY);
-            
-            analogueGain.addEventListener("slider-change", (e) => {
-                const gainValue = e.detail.value;
-                gainVal.textContent = gainValue;
-                
-                // If in auto mode, disable it when user manually adjusts a setting
-                if (isAutoMode) {
-                    isAutoMode = false;
-                    autoModeBtn.classList.remove("active");
-                    fetch(`${serverAddress}:4500/auto_mode`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ enabled: false }),
-                    }).catch(error => {
-                        console.error("Failed to disable auto mode:", error);
-                    });
-                }
-                
-                sendAnalogueGainUpdate(gainValue);
-            });
-        
-            // Exposure with rate limiting
-            const sendExposureUpdate = debounce(async (value) => {
-                // Don't send updates if in auto mode
-                if (isAutoMode) return;
-                
-                const calculatedValue = value;
-                const payload = { value: calculatedValue };
-                try {
-                    await fetch(`${serverAddress}:4500/exposure_time`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify(payload),
-                    });
-                } catch (error) {
-                    console.error("Request failed:", error);
-                }
-            }, RATE_LIMIT_DELAY);
-            
-            exposure.addEventListener("slider-change", (e) => {
-                const exposureValue = e.detail.value;
-                const calculatedValue = exposureValue;
-                shutterSpeedVal.textContent = calculatedValue.toFixed(0);
-                
-                // If in auto mode, disable it when user manually adjusts a setting
-                if (isAutoMode) {
-                    isAutoMode = false;
-                    autoModeBtn.classList.remove("active");
-                    fetch(`${serverAddress}:4500/auto_mode`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({ enabled: false }),
-                    }).catch(error => {
-                        console.error("Failed to disable auto mode:", error);
-                    });
-                }
-                
-                sendExposureUpdate(exposureValue);
-            });
-        
-            const captureButton = document.getElementById("capture");
-            if (captureButton) {
-                captureButton.addEventListener("click", async function() {
-                    try {
-                        const response = await fetch(`${serverAddress}:4500/capture`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                        });
-                    } catch (error) {
-                        console.error("Request failed:", error);
+                elements.themeSwitch.addEventListener("change", function() {
+                    if(this.checked) {
+                        document.body.classList.remove("dark-theme");
+                        document.body.classList.add("light-theme");
+                        localStorage.setItem("theme", "light");
+                    } else {
+                        document.body.classList.remove("light-theme");
+                        document.body.classList.add("dark-theme");
+                        localStorage.setItem("theme", "dark");
                     }
                 });
             }
+            
+            const api = {
+                async fetch(endpoint, method = 'GET', data = null) {
+                    try {
+                        const options = {
+                            method,
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        };
+                        
+                        if (data) {
+                            options.body = JSON.stringify(data);
+                        }
+                        
+                        const response = await fetch(API.baseUrl + endpoint, options);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP error ${response.status}`);
+                        }
+                        
+                        if (method === 'GET') {
+                            return await response.json();
+                        }
+                        
+                        return true;
+                    } catch (error) {
+                        console.error(`API error (${endpoint}):`, error);
+                        return false;
+                    }
+                },
+                
+                getParams: async function() {
+                    return await this.fetch(API.endpoints.params);
+                },
+                
+                setAutoMode: async function(enabled) {
+                    return await this.fetch(API.endpoints.autoMode, 'POST', { enabled });
+                },
+                
+                updateParam: debounce(async function(param, value) {
+                    if (state.isAutoMode) return true;
+                    return await this.fetch(`/${param}`, 'POST', { value });
+                }, API.RATE_LIMIT_DELAY),
+                
+                capture: async function() {
+                    return await this.fetch(API.endpoints.capture, 'POST');
+                }
+            };
+            
+            async function initCameraParameters() {
+                const cameraParams = await api.getParams();
+                if (!cameraParams) return;
+                
+                console.log("Initial camera parameters:", cameraParams);
+                
+                if (cameraParams.colour_gains && cameraParams.colour_gains.length >= 2) {
+                    updateSliderValue("blueGain", cameraParams.colour_gains[0]);
+                    updateSliderValue("redGain", cameraParams.colour_gains[1]);
+                }
+                
+                if (typeof cameraParams.analogue_gain !== 'undefined') {
+                    updateSliderValue("gain", cameraParams.analogue_gain);
+                }
+                
+                if (typeof cameraParams.exposure_time !== 'undefined') {
+                    updateSliderValue("shutterSpeed1", cameraParams.exposure_time);
+                }
+                
+                if (typeof cameraParams.auto_mode !== 'undefined') {
+                    state.isAutoMode = cameraParams.auto_mode;
+                    updateAutoModeUI();
+                }
+            }
+            
+            function updateSliderValue(sliderId, value) {
+                const slider = document.getElementById(sliderId);
+                const valueDisplay = elements.valueDisplays[sliderId];
+                
+                if (slider && slider.setValue) {
+                    slider.setValue(value);
+                }
+                
+                if (valueDisplay) {
+                    if (sliderId === "shutterSpeed1") {
+                        valueDisplay.textContent = value.toFixed(0);
+                    } else {
+                        valueDisplay.textContent = Number(value).toFixed(2);
+                    }
+                }
+            }
+            
+            function updateAutoModeUI() {
+                if (state.isAutoMode) {
+                    elements.autoModeBtn.classList.add("active");
+                } else {
+                    elements.autoModeBtn.classList.remove("active");
+                }
+            }
+            
+            async function toggleAutoMode() {
+                state.isAutoMode = !state.isAutoMode;
+                updateAutoModeUI();
+                
+                const success = await api.setAutoMode(state.isAutoMode);
+                
+                if (success && state.isAutoMode) {
+                    initCameraParameters();
+                }
+                
+                if (!success) {
+                    state.isAutoMode = !state.isAutoMode;
+                    updateAutoModeUI();
+                }
+            }
+            
+            function setupSliders() {
+                elements.sliders.forEach(slider => {
+                    slider.addEventListener("slider-change", (e) => {
+                        const value = e.detail.value;
+                        const sliderId = slider.id;
+                        const valueDisplay = elements.valueDisplays[sliderId];
+                        const paramName = slider.getAttribute('data-param');
+                        
+                        if (valueDisplay) {
+                            if (sliderId === "shutterSpeed1") {
+                                valueDisplay.textContent = value.toFixed(0);
+                            } else {
+                                valueDisplay.textContent = value.toFixed(2);
+                            }
+                        }
+                        
+                        if (state.isAutoMode) {
+                            state.isAutoMode = false;
+                            updateAutoModeUI();
+                            api.setAutoMode(false);
+                        }
+                        
+                        api.updateParam(paramName, value);
+                    });
+                });
+            }
+            
+            function init() {
+                initTheme();
+                elements.autoModeBtn.addEventListener("click", toggleAutoMode);
+                elements.capture.addEventListener("click", api.capture);
+                setupSliders();
+                initCameraParameters();
+            }
+            
+            init();
         });
     </script>
 </body>
