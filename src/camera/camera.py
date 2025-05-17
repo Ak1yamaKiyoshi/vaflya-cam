@@ -88,16 +88,31 @@ class Camera:
             else params.exposure_time
         )
 
-        self._cam.set_controls(
-            {
-                "AeEnable": params.AeEnable,
-                "AwbEnable": params.AwbEnable,
+        camcontrols = {
                 # AwbModeEnum
+                "NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality,
+        }
+        if params.AeEnable:
+            camcontrols.update({
+                "AeEnable": True,
+                "AwbEnable": True,
+                "AeMeteringMode": controls.AeMeteringModeEnum.CentreWeighted,
+                "AeExposureMode": controls.AeExposureModeEnum.Long,  # Long exposure mode helps in low light
+                "AwbMode": controls.AwbModeEnum.Auto,
+                "ExposureValue": 4.0,
+                "FrameDurationLimits": (33333, 100000)  
+            })
+        else: 
+            camcontrols = {**camcontrols,
                 "ExposureTime": exposure_time,
                 "AnalogueGain": params.analogue_gain,
-                "ColourGains": params.colour_gains,
-                "NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality,
+                "ColourGains": params.colour_gains
             }
+            
+            print("AAAA ")
+        print(camcontrols)
+        self._cam.set_controls(
+            camcontrols   
         )
 
         self._cam.start()

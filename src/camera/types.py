@@ -12,7 +12,7 @@ class CameraParameters:
     analogue_gain: float
     colour_gains: Tuple[float, float]
     exposure_time: int
-    resolution: Tuple[float, float] = 4056, 3040
+    resolution: Tuple[float, float] = 4056//2, 3040//2
     AeEnable: bool = False
     AwbEnable: bool = False
 

@@ -10,18 +10,17 @@ import select
 import threading
 from evdev import InputDevice, ecodes, list_devices, categorize
 
-# Define the framebuffer device
 fb_device = '/dev/fb0'
 
-# Initialize framebuffer
 def init_framebuffer():
     try:
         fb = open(fb_device, 'rb+')
-        width = 480
-        height = 320
-        bpp = 16
+        width = 800
+        height = 480
+        bpp = 32
         frame_size = width * height * bpp // 8
         fbmap = mmap.mmap(fb.fileno(), frame_size, mmap.MAP_SHARED, mmap.PROT_WRITE | mmap.PROT_READ, offset=0)
+        print(f"Framebuffer initialized: {width}x{height}, {bpp}bpp")
         return fb, fbmap, width, height, bpp, frame_size
     except Exception as e:
         print(f"Error initializing framebuffer: {e}")
@@ -29,17 +28,14 @@ def init_framebuffer():
         traceback.print_exc()
         sys.exit(1)
 
-# Find touch input device
 def find_touch_device():
     try:
-        # Try to use the specific device for ADS7846 Touchscreen
         device = InputDevice('/dev/input/event1')
         print(f"Using touch device: {device.name} at {device.path}")
         return device
     except Exception as e:
         print(f"Error opening touchscreen device: {e}")
         
-        # Fallback: look for touch device by name
         try:
             devices = [InputDevice(path) for path in list_devices()]
             for device in devices:
@@ -53,7 +49,6 @@ def find_touch_device():
     print("No touch device found. Touch functionality will be disabled.")
     return None
 
-# Touch event monitor thread with detailed console output
 def touch_monitor_thread(touch_device, on_touch_callback):
     if touch_device is None:
         return
@@ -61,14 +56,20 @@ def touch_monitor_thread(touch_device, on_touch_callback):
     print(f"Starting touch monitor for device: {touch_device.name}")
     print(f"Device capabilities: {touch_device.capabilities(verbose=True)}")
     
-    # ADS7846 typically uses absolute positioning
     has_abs_x = ecodes.ABS_X in touch_device.capabilities().get(ecodes.EV_ABS, [])
     has_abs_y = ecodes.ABS_Y in touch_device.capabilities().get(ecodes.EV_ABS, [])
+    has_abs_mt_x = ecodes.ABS_MT_POSITION_X in touch_device.capabilities().get(ecodes.EV_ABS, [])
+    has_abs_mt_y = ecodes.ABS_MT_POSITION_Y in touch_device.capabilities().get(ecodes.EV_ABS, [])
     has_btn_touch = ecodes.BTN_TOUCH in touch_device.capabilities().get(ecodes.EV_KEY, [])
     
-    print(f"Touch device has: ABS_X: {has_abs_x}, ABS_Y: {has_abs_y}, BTN_TOUCH: {has_btn_touch}")
+    print(f"Touch device has: ABS_X: {has_abs_x}, ABS_Y: {has_abs_y}, MT_X: {has_abs_mt_x}, MT_Y: {has_abs_mt_y}, BTN_TOUCH: {has_btn_touch}")
     
-    # Read current touch values
+    uses_multitouch = has_abs_mt_x and has_abs_mt_y
+    if uses_multitouch:
+        print("Detected multi-touch device (Protocol B)")
+    else:
+        print("Detected single-touch device (older protocol)")
+    
     touch_x = 0
     touch_y = 0
     touch_pressure = 0
@@ -78,8 +79,7 @@ def touch_monitor_thread(touch_device, on_touch_callback):
         if has_abs_x and ecodes.ABS_X in touch_device.capabilities()[ecodes.EV_ABS]:
             absinfo = touch_device.absinfo(ecodes.ABS_X)
             print(f"X-axis range: {absinfo.min} to {absinfo.max}")
-        
-        if has_abs_y and ecodes.ABS_Y in touch_device.capabilities()[ecodes.EV_ABS]:
+        if has_abs_y:
             absinfo = touch_device.absinfo(ecodes.ABS_Y)
             print(f"Y-axis range: {absinfo.min} to {absinfo.max}")
     except Exception as e:
@@ -90,11 +90,9 @@ def touch_monitor_thread(touch_device, on_touch_callback):
             r, w, x = select.select([touch_device.fd], [], [], 0.1)
             if r:
                 for event in touch_device.read():
-                    # Print the event details
                     event_str = str(categorize(event))
                     print(f"Touch event: {event_str}")
                     
-                    # Track coordinate values
                     if event.type == ecodes.EV_ABS:
                         if event.code == ecodes.ABS_X:
                             touch_x = event.value
@@ -110,7 +108,7 @@ def touch_monitor_thread(touch_device, on_touch_callback):
                         if on_touch_callback:
                             on_touch_callback(touch_x, touch_y)
             
-            time.sleep(0.01)  # Small sleep to prevent CPU hogging
+            time.sleep(0.01)
     except Exception as e:
         print(f"Error in touch monitor: {e}")
         import traceback
@@ -118,19 +116,22 @@ def touch_monitor_thread(touch_device, on_touch_callback):
     finally:
         print("Touch monitor thread exiting")
 
-def frame_to_rgb565(frame, width, height):
+def frame_to_framebuffer_format(frame, width, height):
     if frame.shape[1] != width or frame.shape[0] != height:
         frame = cv.resize(frame, (width, height), interpolation=cv.INTER_NEAREST)
     
-    rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
+    bgra = np.zeros((height, width, 4), dtype=np.uint8)
+    bgra[:, :, :3] = frame
+    bgra[:, :, 3] = 255
     
-    r = (rgb[:,:,0] >> 3).astype(np.uint16) << 11
-    g = (rgb[:,:,1] >> 2).astype(np.uint16) << 5
-    b = (rgb[:,:,2] >> 3).astype(np.uint16)
-    
-    rgb565 = r | g | b
-    
-    return rgb565
+    return bgra
+
+
+if not os.path.exists("./galleries/"):
+    os.makedirs("./galleries/")
+
+current_gallery = f"galleries/gallery{len(os.listdir('./galleries/'))}"
+os.mkdir(current_gallery)
 
 def main():
     fb, fbmap, width, height, bpp, frame_size = init_framebuffer()
@@ -143,7 +144,6 @@ def main():
         print("Touch functionality will be disabled.")
         touch_device = None
     
-    # Import camera modules
     from src.camera import (
         Camera,
         CameraParameters,
@@ -158,7 +158,6 @@ def main():
     import subprocess
     
     try:
-        # Get IP address
         def get_ip_addresses():
             try:
                 output = subprocess.check_output("hostname -I", shell=True).decode("utf-8").strip()
@@ -172,19 +171,17 @@ def main():
         except: 
             address = "restart with Akiyama enabled..."
         
-        # Initialize camera
         print("Initializing camera...")
         cam = Camera()
-        time.sleep(0.01)
+        cam.reconfigure(CameraParameters(1,(1,1),1 ,AeEnable=True, AwbEnable=True))
         
-        # Start servers
         servers = [
             (
                 "Camera configuration server",
                 CameraServer(camera=cam, callback_capture=cam.capture_and_save, port=4500),
             ),
             ("Camera controls frontend", StaticHTTPServer("./src/client", port=4600)),
-            ("Gallery", StaticHTTPServer("./gallery/", port=4800)),
+            ("Gallery", StaticHTTPServer("./galleries/", port=4800)),
             ("Image stream", ImageStream(5000)),
         ]
         
@@ -194,40 +191,57 @@ def main():
         
         image_display = servers[-1][1]
         
-        # Set camera to auto mode
-        cam.set_auto()
         
-        # Main loop
         frame_count = 0
         start_time = time.time()
         last_frame_time = start_time
         last_capture_time = 0
         print("Starting camera display loop...")
         
-        # Fixed frame interval for 10 FPS
-        frame_interval = 0.1  # 100ms = 10 FPS
+        frame_interval = 0.001
         
-        # Define callback for touch events
         is_touched = False
-        touch_debounce_time = 0.5  # Debounce time in seconds
+        touch_debounce_time = 0.5
         last_touch_x = 0
         last_touch_y = 0
+        
+        def test_simple_colors(fbmap, width, height):
+            # Red test
+            red = np.zeros((height, width, 4), dtype=np.uint8)
+            red[:, :, 2] = 255  # BGR: red in channel 2
+            red[:, :, 3] = 255
+            fbmap.seek(0)
+            fbmap.write(red.tobytes())
+            time.sleep(0.1)
+            
+            # Green test
+            green = np.zeros((height, width, 4), dtype=np.uint8)
+            green[:, :, 1] = 255
+            green[:, :, 3] = 255
+            fbmap.seek(0)
+            fbmap.write(green.tobytes())
+            time.sleep(0.1)
+            
+            # Blue test
+            blue = np.zeros((height, width, 4), dtype=np.uint8)
+            blue[:, :, 0] = 255
+            blue[:, :, 3] = 255
+            fbmap.seek(0)
+            fbmap.write(blue.tobytes())
+            time.sleep(0.1)
         
         def on_touch(x, y):
             nonlocal is_touched, last_capture_time, last_touch_x, last_touch_y
             current_time = time.time()
             
-            # Store touch coordinates
             last_touch_x = x
             last_touch_y = y
             
-            # Debounce touch events
             if current_time - last_capture_time > touch_debounce_time:
                 is_touched = True
                 last_capture_time = current_time
                 print(f"*** CAPTURE TRIGGERED at position ({x}, {y}) ***")
         
-        # Start touch monitor thread if touch device is available
         if touch_device:
             touch_thread = threading.Thread(
                 target=touch_monitor_thread, 
@@ -236,8 +250,9 @@ def main():
             )
             touch_thread.start()
         
+        test_simple_colors(fbmap, width, height)
+        
         while True:
-            # Enforce 10 FPS limit
             current_time = time.time()
             elapsed_since_last_frame = current_time - last_frame_time
             
@@ -247,25 +262,28 @@ def main():
             
             last_frame_time = time.time()
             
-            # Capture frame
             frame: CameraFrameWrapper = cam.capture(-1)
             
-            # Check for touch event
             if is_touched:
                 print(f"Processing touch at ({last_touch_x}, {last_touch_y}) - capturing and saving image")
-                cam.capture_and_save()
+                cam.capture_and_save(output_path=current_gallery)
                 is_touched = False
             
-            # Process frame for display
-            lores = cv.resize(frame.frame, (426, height), interpolation=cv.INTER_NEAREST)
+            aspect_ratio = frame.frame.shape[1] / frame.frame.shape[0]
+            new_width = int(height * aspect_ratio)
+            lores = cv.resize(frame.frame, (new_width, height), interpolation=cv.INTER_NEAREST)
             
-            # Pad left with black to match TFT width
-            lores = cv.copyMakeBorder(
-                lores, 0, 0, width - 426, 0, cv.BORDER_CONSTANT, value=[0, 0, 0]
-            )
+            if new_width < width:
+                pad_left = (width - new_width) // 2
+                pad_right = width - new_width - pad_left
+                lores = cv.copyMakeBorder(
+                    lores, 0, 0, pad_left, pad_right, cv.BORDER_CONSTANT, value=[0, 0, 0]
+                )
+            elif new_width > width:
+                start_x = (new_width - width) // 2
+                lores = lores[:, start_x:start_x + width]
             
-            # Get hires crop from frame
-            pad_side = 150
+            pad_side = 350
             margin = 10
             h, w = frame.frame.shape[:2]
             cx, cy = w // 2, h // 2
@@ -274,12 +292,10 @@ def main():
                 cx - pad_side // 2 : cx + pad_side // 2,
             ]
             
-            # Draw cross in center
             line_length = 8
             crop_line_length = 4
             thickness = 1
             
-            # Get contrast color
             crop_color = np.mean(crop, axis=(0, 1)).astype(np.uint8)
             r, g, b = crop_color[0], crop_color[1], crop_color[2]
             luminance = 0.299 * r + 0.587 * g + 0.114 * b
@@ -289,7 +305,6 @@ def main():
             else:
                 color = (255, 255, 255)
             
-            # Draw cross on crop
             h, w = crop.shape[:2]
             cx, cy = w // 2, h // 2
             cv.line(
@@ -307,19 +322,16 @@ def main():
                 thickness,
             )
             
-            # Draw cross on lores
             h, w = lores.shape[:2]
             cx, cy = w // 2, h // 2
             cv.line(lores, (cx - line_length, cy), (cx + line_length, cy), color, thickness)
             cv.line(lores, (cx, cy - line_length), (cx, cy + line_length), color, thickness)
             
-            # Paste hires crop to lores
             lores_h, lores_w = lores.shape[:2]
             lores[
                 lores_h - pad_side - margin : lores_h - margin, margin : margin + pad_side
             ] = crop
             
-            # Add text
             font = cv.FONT_HERSHEY_SIMPLEX
             font_scale = 0.38
             shadow_offset = 1
@@ -336,7 +348,6 @@ def main():
                 f"hz: {hz:3.1f}, FPS: {frame_count/(time.time()-start_time):3.1f}",
             ]
             
-            # Add touch status with last touch position
             if touch_device:
                 text_items.append(f"Touch: enabled ({last_touch_x},{last_touch_y})")
             else:
@@ -355,20 +366,15 @@ def main():
                 )
                 cv.putText(lores, text, (start_x, y), font, font_scale, (255, 255, 255), 1)
             
-            # Send to HTTP stream
             image_display.input_image(lores)
             
-            # Convert to RGB565 for framebuffer
-            rgb565 = frame_to_rgb565(lores, width, height)
+            fb_frame = frame_to_framebuffer_format(lores, width, height)
             
-            # Write to framebuffer
             fbmap.seek(0)
-            fbmap.write(rgb565.tobytes())
+            fbmap.write(fb_frame.tobytes())
             
-            # Update frame count
             frame_count += 1
             
-            # Print stats every 30 frames
             if frame_count % 30 == 0:
                 elapsed = time.time() - start_time
                 print(f"FPS: {frame_count/elapsed:.1f}, Running time: {elapsed:.1f}s")
@@ -382,10 +388,8 @@ def main():
         traceback.print_exc()
     
     finally:
-        # Clean up
         print("Cleaning up...")
-        # Clear screen to black
-        black_screen = np.zeros((height, width), dtype=np.uint16)
+        black_screen = np.zeros((height, width, 4), dtype=np.uint8)
         fbmap.seek(0)
         fbmap.write(black_screen.tobytes())
         
