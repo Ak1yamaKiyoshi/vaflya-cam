@@ -90,6 +90,7 @@ class Camera:
 
         camcontrols = {
                 # AwbModeEnum
+                "FrameRate": 40.0, 
                 "NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality,
         }
         if params.AeEnable:
@@ -100,7 +101,7 @@ class Camera:
                 "AeExposureMode": controls.AeExposureModeEnum.Long,  # Long exposure mode helps in low light
                 "AwbMode": controls.AwbModeEnum.Auto,
                 "ExposureValue": 4.0,
-                "FrameDurationLimits": (33333, 100000)  
+                "FrameDurationLimits": (533, 100000)  
             })
         else: 
             camcontrols = {**camcontrols,
@@ -109,8 +110,6 @@ class Camera:
                 "ColourGains": params.colour_gains
             }
             
-            print("AAAA ")
-        print(camcontrols)
         self._cam.set_controls(
             camcontrols   
         )
