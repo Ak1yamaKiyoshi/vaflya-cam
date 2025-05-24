@@ -1,3 +1,7 @@
+`/boot/firmware/config.txt```
+Underclock only if you ok with slow saving speed and you explicitly need more battery life. 
+
+```
 # camera
 camera_auto_detect=1
 
@@ -16,3 +20,4 @@ arm_freq=800
 arm_freq_min=500
 over_voltage_delta=-2
 gpu_freq=400
+```
