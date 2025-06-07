@@ -72,6 +72,21 @@ class Camera:
         })
         self._cam.start()
     
+    
+    def make_update_parameters(self, parameter_update, value):
+        latest = {
+                "NoiseReductionMode": controls.draft.NoiseReductionModeEnum.HighQuality,
+                "ExposureTime": self._params_latest.exposure_time,
+                "AnalogueGain": self._params_latest.analogue_gain,
+                "ColourGains": self._params_latest.colour_gains   
+        }
+        
+        if parameter_update in latest:
+            latest[parameter_update] = value
+        
+        return CameraParameters(analogue_gain=latest["AnalogueGain"], colour_gains=latest["ColourGains"], exposure_time=latest['ExposureTime'])
+            
+        
         
     def reconfigure(self, params: CameraParameters):
         self._params_request = params
