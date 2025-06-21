@@ -42,12 +42,24 @@ class Slider:
         self.dragging = False
     
     def draw(self, canvas):
+        # Draw slider track with black outline
         for i in range(0, self.width, 10):
+            # Black outline (+1x, +1y offset)
+            cv.line(canvas, (self.x + i + 1, self.y + 1), (self.x + i + 5 + 1, self.y + 1), (0, 0, 0), 1)
+            # White fill
             cv.line(canvas, (self.x + i, self.y), (self.x + i + 5, self.y), (100, 100, 100), 1)
         
+        # Draw vertical line marker (|) instead of X
         cross_x = self.value_to_x(self.value)
-        cv.line(canvas, (cross_x - 8, self.y - 8), (cross_x + 8, self.y + 8), (255, 255, 255), 2)
-        cv.line(canvas, (cross_x - 8, self.y + 8), (cross_x + 8, self.y - 8), (255, 255, 255), 2)
+        # Black outline (+1x, +1y offset)
+        cv.line(canvas, (cross_x + 1, self.y - 8 + 1), (cross_x + 1, self.y + 8 + 1), (0, 0, 0), 3)
+        # White fill
+        cv.line(canvas, (cross_x, self.y - 8), (cross_x, self.y + 8), (255, 255, 255), 2)
         
+        # Draw text with black outline
+        # Black outline (+1x, +1y offset)
+        cv.putText(canvas, f"{self.text}: {self.value:.1f}", 
+                  (self.x + 1, self.y - 15 + 1), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+        # White fill
         cv.putText(canvas, f"{self.text}: {self.value:.1f}", 
                   (self.x, self.y - 15), cv.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)

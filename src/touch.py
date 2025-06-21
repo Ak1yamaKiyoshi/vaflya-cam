@@ -4,7 +4,7 @@ import time
 
 def find_touch_device():
     try:
-        device = InputDevice('/dev/input/event1')
+        device = InputDevice('/dev/input/event5')
         return device
     except Exception as e:
         
