@@ -58,11 +58,14 @@ class VideoSaveTask:
 
 class App:
     def __init__(self):
-        self.red_gain = 1.0
-        self.blue_gain = 1.0
+        self.red_gain = 2.25
+        self.blue_gain = 3.25
         self.analogue_gain = 1.0
         self.exposure_time = 33000
         
+        # Display rotation configuration
+        self.rotate_180 = True  # Set to True for 180° rotation
+
         self.total_photos_saved = 0
         self.total_videos_saved = 0
         self.photo_save_status = "idle"
@@ -71,8 +74,16 @@ class App:
         self.video_total_frames = 0
         self.last_saved_filename = ""
         
+        self.is_auto_colors = False
+        self.set_auto_timestamp = 0
+        
         self.active_slider = None
         self.active_button = None
+        
+        # UI update control
+        self.ui_update_requested = threading.Event()
+        self.ui_lock = threading.Lock()
+        self.last_camera_params = None
         
         self.init_directories()
         self.init_screen()
@@ -80,6 +91,10 @@ class App:
         self.init_camera()
         self.init_saving_threads()
         self.init_servers()
+        
+        # Start UI update thread
+        self.ui_thread = threading.Thread(target=self._ui_update_loop, daemon=True)
+        self.ui_thread.start()
         
         self.update_display()
 
@@ -132,6 +147,70 @@ class App:
 
         self.image_server = self.servers[-1][1]
 
+    def _ui_update_loop(self):
+        """Independent UI update loop running at 60Hz"""
+        last_canvas = None
+        
+        while True:
+            try:
+                # Always try to update UI at 60Hz, regardless of camera status
+                start_time = time.time()
+                
+                # Check if camera parameters changed and sync UI
+                self._check_and_sync_camera_params()
+                
+                # Update display - always update even if camera is reconfiguring
+                with self.ui_lock:
+                    # Keep using last valid canvas if current one is None/invalid
+                    if self.canvas is not None and self.canvas.size > 0:
+                        last_canvas = self.canvas.copy()
+                    
+                    if last_canvas is not None:
+                        self.update_display_with_canvas(last_canvas)
+                
+                # Maintain 60Hz timing
+                elapsed = time.time() - start_time
+                sleep_time = max(0, (1/60) - elapsed)
+                time.sleep(sleep_time)
+                    
+            except Exception as e:
+                print(f"Error in UI update loop: {e}")
+                time.sleep(1/60)
+
+    def _check_and_sync_camera_params(self):
+        """Check if camera parameters changed and sync sliders accordingly"""
+        try:
+            current_params = self.camera._params_latest
+            
+            # Check if parameters changed
+            if (self.last_camera_params is None or 
+                current_params.exposure_time != self.last_camera_params.exposure_time or
+                current_params.analogue_gain != self.last_camera_params.analogue_gain or
+                current_params.colour_gains != self.last_camera_params.colour_gains):
+                
+                # Update local values
+                self.exposure_time = current_params.exposure_time
+                self.analogue_gain = current_params.analogue_gain
+                self.red_gain = current_params.colour_gains[0]
+                self.blue_gain = current_params.colour_gains[1]
+                
+                # Sync sliders (only if not currently being dragged)
+                if not self.active_slider:
+                    for slider in self.sliders:
+                        if slider.callback == self.__shutter_callback:
+                            slider.value = self.exposure_time
+                        elif slider.callback == self.__gain_callback:
+                            slider.value = self.analogue_gain
+                        elif slider.callback == self.__gain_r_callback:
+                            slider.value = self.red_gain
+                        elif slider.callback == self.__gain_b_callback:
+                            slider.value = self.blue_gain
+                
+                self.last_camera_params = current_params
+                
+        except Exception as e:
+            print(f"Error syncing camera params: {e}")
+
     def _photo_save_worker(self):
         while True:
             try:
@@ -152,6 +231,9 @@ class App:
                 print(f"Photo saved: {filename}")
                 self.photo_save_queue.task_done()
                 
+                # Request UI update
+                self.ui_update_requested.set()
+                
             except Exception as e:
                 self.photo_save_status = "error"
                 print(f"Error saving photo: {e}")
@@ -164,6 +246,7 @@ class App:
                     break
                 
                 self.video_save_status = "processing"
+                self.ui_update_requested.set()
                 
                 all_frames = task.frame_list._list
                 frames = list(all_frames) if hasattr(all_frames, '__iter__') else []
@@ -183,57 +266,35 @@ class App:
                 
                 frame_count = 0
                 
-                if frames:
-                    height, width = frames[0].frame.shape[:2]
-                else:
-                    continue
-                
                 for frame in frames:
                     frame_filename = f"{frame_count:04d}.png"
                     frame_path = os.path.join(frames_folder_path, frame_filename)
                     cv.imwrite(frame_path, frame.frame)
                     frame_count += 1
                     self.video_frames_processed = frame_count
-                
-                if frame_count > 0:
-                    video_filename = f"{task.formatted_time}_video.mkv"
-                    video_path = os.path.join(self.current_gallery, video_filename)
                     
-                    try:
-                        self._create_video_with_ffmpeg(frames_folder_path, video_path, frame_count, width, height)
-                        self.total_videos_saved += 1
-                    except Exception as e:
-                        print(f"Error creating video: {e}")
+                    # Update UI every 10 frames
+                    if frame_count % 10 == 0:
+                        self.ui_update_requested.set()
                 
+                self.total_videos_saved += 1
                 self.video_save_status = "idle"
                 self.video_frames_processed = 0
                 self.video_total_frames = 0
                 
-                print(f"Video saved: {task.formatted_time}")
+                print(f"Video frames saved: {task.formatted_time}")
                 self.video_save_queue.task_done()
+                self.ui_update_requested.set()
                 
             except Exception as e:
                 self.video_save_status = "error"
                 print(f"Error in video save thread: {e}")
 
-    def _create_video_with_ffmpeg(self, frames_folder, output_path, frame_count, width, height):
-        cmd = [
-            'ffmpeg', '-y', '-r', '20',
-            '-i', os.path.join(frames_folder, '%04d.png'),
-            '-c:v', 'mpeg2video', '-q:v', '2',
-            '-pix_fmt', 'yuv420p', '-b:v', '8000k',
-            output_path
-        ]
-        
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = process.communicate()
-        
-        if process.returncode != 0:
-            print(f"FFmpeg error: {stderr.decode()}")
-            raise Exception("FFmpeg failed")
+
 
     def init_camera(self):
         self.camera = Camera()
+        # Use the values we initialized with
         self.camera.reconfigure(CameraParameters(
             analogue_gain=self.analogue_gain,
             colour_gains=(self.red_gain, self.blue_gain),
@@ -242,6 +303,7 @@ class App:
             AwbEnable=True
         ))
         self.camera.capture(-1)
+        # Sync sliders after camera is initialized
         self._sync_sliders_to_camera()
 
     def init_screen(self):
@@ -250,7 +312,7 @@ class App:
         
     def init_ui(self):
         self.sliders = [
-            Slider(40, 80, 720, 144, 33_000*3, 50, UI_NAMES.SHUTTER_SLIDER, self.__shutter_callback),
+            Slider(40, 80, 720, 144, 33_000*4, 50, UI_NAMES.SHUTTER_SLIDER, self.__shutter_callback),
             Slider(40, 320, 200, 1, 22, 0.1, UI_NAMES.GAIN_SLIDER, self.__gain_callback),
             Slider(100+50, 380, 500, 0.5, 7.0, 0.1, UI_NAMES.GAIN_B_SLIDER, self.__gain_b_callback),
             Slider(100+50, 440, 500, 0.5, 7.0, 0.1, UI_NAMES.GAIN_R_SLIDER, self.__gain_r_callback),
@@ -258,6 +320,10 @@ class App:
         self.buttons = [   
             Button(-120+50, 420, 200, 100, "PH", (0, 0, 0), -45, self.__shot_callback),
             Button(620+50, 420, 200, 100, "VI", (0, 0, 0), 45, self.__video_callback),
+            Button(590, 0, 200, 20, "X", (0, 0, 0), 0, self.__shot_callback),
+            Button(20, 200, 50, 50, "Auto", (0, 120, 120), 0, self.__auto_callback),
+            Button(20, 120, 50, 50, "Manual", (120, 120, 0), 0, self.__auto_callback)
+
         ]
 
     def map_touch_coordinates(self, touch_x, touch_y, touch_device):
@@ -274,6 +340,12 @@ class App:
                 screen_y = int((touch_y - y_info.min) * self.height / (y_info.max - y_info.min))
             except:
                 screen_x, screen_y = touch_x, touch_y
+        
+        # Apply rotation if enabled
+        if self.rotate_180:
+            screen_x = self.width - 1 - screen_x
+            screen_y = self.height - 1 - screen_y
+        
         return max(0, min(self.width - 1, screen_x)), max(0, min(self.height - 1, screen_y))
 
     def on_touch_event(self, touch_x, touch_y, is_press, is_release, touch_device):
@@ -302,10 +374,22 @@ class App:
                 
         elif self.active_slider:
             self.active_slider.update_drag(screen_x)
-
+        
+        # Request UI update on any touch event
+        self.ui_update_requested.set()
+        
+    def __auto_callback(self, name):
+        if name == "Auto":
+            self.camera.set_auto()
+        else:
+            self.camera.disable_auto()
+            
     def __shutter_callback(self, name, value):        
         self.exposure_time = int(value)
-        self.camera.reconfigure(self.camera.make_update_parameters("ExposureTime", self.exposure_time))
+        # Use quick update instead of full reconfigure
+        if not self.camera.quick_update_exposure(self.exposure_time):
+            # Fallback to full reconfigure if quick update fails
+            self.camera.reconfigure(self.camera.make_update_parameters("ExposureTime", self.exposure_time))
 
     def __gain_r_callback(self, name, value):
         self.red_gain = value
@@ -317,29 +401,40 @@ class App:
     
     def _update_colour_gains(self):
         try:
-            self.camera.reconfigure(self.camera.make_update_parameters(
-                "ColourGains", (self.red_gain, self.blue_gain)
-            ))
+            # Use quick update instead of full reconfigure
+            if not self.camera.quick_update_colour_gains((self.red_gain, self.blue_gain)):
+                # Fallback to full reconfigure if quick update fails
+                self.camera.reconfigure(self.camera.make_update_parameters(
+                    "ColourGains", (self.red_gain, self.blue_gain)
+                ))
         except Exception as e:
             print(f"Error updating colour gains: {e}")
 
     def _sync_sliders_to_camera(self):
-        latest_params = self.camera._params_latest
-        
-        for slider in self.sliders:
-            if slider.callback == self.__shutter_callback:
-                slider.value = latest_params.exposure_time
-            elif slider.callback == self.__gain_callback:
-                slider.value = latest_params.analogue_gain
-            elif slider.callback == self.__gain_r_callback:
-                slider.value = latest_params.colour_gains[0]
-            elif slider.callback == self.__gain_b_callback:
-                slider.value = latest_params.colour_gains[1]
-        
-        self.exposure_time = latest_params.exposure_time
-        self.analogue_gain = latest_params.analogue_gain
-        self.red_gain = latest_params.colour_gains[0]
-        self.blue_gain = latest_params.colour_gains[1]
+        """Force sync sliders to current camera parameters"""
+        try:
+            latest_params = self.camera._params_latest
+            
+            for slider in self.sliders:
+                if slider.callback == self.__shutter_callback:
+                    slider.value = latest_params.exposure_time
+                elif slider.callback == self.__gain_callback:
+                    slider.value = latest_params.analogue_gain
+                elif slider.callback == self.__gain_r_callback:
+                    slider.value = latest_params.colour_gains[0]
+                elif slider.callback == self.__gain_b_callback:
+                    slider.value = latest_params.colour_gains[1]
+            
+            # Update local values
+            self.exposure_time = latest_params.exposure_time
+            self.analogue_gain = latest_params.analogue_gain
+            self.red_gain = latest_params.colour_gains[0]
+            self.blue_gain = latest_params.colour_gains[1]
+            
+            self.last_camera_params = latest_params
+            
+        except Exception as e:
+            print(f"Error syncing sliders to camera: {e}")
 
     def __shot_callback(self, name):
         self.take_photo()
@@ -349,12 +444,15 @@ class App:
     
     def __gain_callback(self, name, value):
         self.analogue_gain = value
-        self.camera.reconfigure(self.camera.make_update_parameters("AnalogueGain", self.analogue_gain))
+        # Use quick update instead of full reconfigure
+        if not self.camera.quick_update_gain(self.analogue_gain):
+            # Fallback to full reconfigure if quick update fails
+            self.camera.reconfigure(self.camera.make_update_parameters("AnalogueGain", self.analogue_gain))
 
     def take_photo(self):
         try:
             frame_wrapper = self.camera.capture(0.1)
-            
+
             timestamp = time.time()
             now = datetime.fromtimestamp(timestamp)
             formatted_time = now.strftime("%Y.%m.%d-%H:%M:%S.%f")[:-3]
@@ -411,80 +509,138 @@ class App:
                           font, font_scale, (255, 255, 255), 1)
 
     def make_step(self):
-        frame_wrapper = self.camera.capture(0)
-        display_frame = frame_wrapper.frame.copy()
-        
-        aspect_ratio = display_frame.shape[1] / display_frame.shape[0]
-        new_width = int(self.height * aspect_ratio)
-        lores = cv.resize(display_frame, (new_width, self.height), interpolation=cv.INTER_NEAREST)
-
-        image_offset = 70
-        
-        if new_width < self.width:
-            pad_left = (self.width - new_width) // 2 - image_offset
-            pad_right = self.width - new_width - pad_left
-            if pad_left < 0:
-                image_offset = (self.width - new_width) // 2
-                pad_left = 0
-                pad_right = self.width - new_width
+        """Main camera processing loop - now separate from UI updates"""
+        try:
+            frame_wrapper = self.camera.capture(0)
+            if frame_wrapper is None or frame_wrapper.frame is None:
+                return  # Skip this frame but don't stop UI updates
+                
+            display_frame = frame_wrapper.frame.copy()
             
-            lores = cv.copyMakeBorder(
-                lores, 0, 0, pad_left, pad_right, cv.BORDER_CONSTANT, value=[0, 0, 0]
-            )
-        elif new_width > self.width:
-            start_x = (new_width - self.width) // 2 - image_offset 
-            if start_x < 0:
-                start_x = 0
-            lores = lores[:, start_x:start_x + self.width]
+            aspect_ratio = display_frame.shape[1] / display_frame.shape[0]
+            new_width = int(self.height * aspect_ratio)
+            lores = cv.resize(display_frame, (new_width, self.height), interpolation=cv.INTER_NEAREST)
 
-        pad_side = 350 
-        display_crop_size = 200  
-        margin = 10
-        h, w = display_frame.shape[:2]
-        cx, cy = w // 2, h // 2
-
-        crop = display_frame[
-            cy - pad_side // 2 : cy + pad_side // 2,
-            cx - pad_side // 2 : cx + pad_side // 2,
-        ]
-
-        crop_display = cv.resize(crop, (display_crop_size, display_crop_size), interpolation=cv.INTER_LINEAR)
-
-        crop_color = np.mean(crop, axis=(0, 1)).astype(np.uint8)
-        r, g, b = crop_color[0], crop_color[1], crop_color[2]
-        luminance = 0.299 * r + 0.587 * g + 0.114 * b
-
-        if luminance > 127:
-            color = (0, 0, 0)
-            grid_color = (80, 80, 80)  
-        else:
-            color = (255, 255, 255)
-            grid_color = (160, 160, 160)
+            image_offset = 70
             
-        crop_gray = cv.cvtColor(crop_display, cv.COLOR_BGR2GRAY)
-        edges = cv.Canny(crop_gray, 50, 150)
-        edges_colored = cv.cvtColor(edges, cv.COLOR_GRAY2BGR)
-        crop_display = cv.addWeighted(crop_display, 0.7, edges_colored, 0.3, 0)
+            if new_width < self.width:
+                pad_left = (self.width - new_width) // 2 - image_offset
+                pad_right = self.width - new_width - pad_left
+                if pad_left < 0:
+                    image_offset = (self.width - new_width) // 2
+                    pad_left = 0
+                    pad_right = self.width - new_width
+                
+                lores = cv.copyMakeBorder(
+                    lores, 0, 0, pad_left, pad_right, cv.BORDER_CONSTANT, value=[0, 0, 0]
+                )
+            elif new_width > self.width:
+                start_x = (new_width - self.width) // 2 - image_offset 
+                if start_x < 0:
+                    start_x = 0
+                lores = lores[:, start_x:start_x + self.width]
 
-        lores_h, lores_w = lores.shape[:2]
-        crop_x = lores_w - display_crop_size - margin  
-        crop_y = margin 
-        lores[crop_y:crop_y + display_crop_size, crop_x:crop_x + display_crop_size] = crop_display
+            pad_side = 350 
+            display_crop_size = 200  
+            margin = 10
+            h, w = display_frame.shape[:2]
+            cx, cy = w // 2, h // 2
 
-        self.canvas = lores
-        self.image_server.input_image(lores)
-        self.update_display()
+            crop = display_frame[
+                cy - pad_side // 2 : cy + pad_side // 2,
+                cx - pad_side // 2 : cx + pad_side // 2,
+            ]
+
+            crop_display = cv.resize(crop, (display_crop_size, display_crop_size), interpolation=cv.INTER_LINEAR)
+
+            crop_color = np.mean(crop, axis=(0, 1)).astype(np.uint8)
+            b, g, r = crop_color[0], crop_color[1], crop_color[2]
+            luminance = 0.299 * r + 0.587 * g + 0.114 * b
+
+            if luminance > 127:
+                color = (0, 0, 0)
+                grid_color = (80, 80, 80)  
+            else:
+                color = (255, 255, 255)
+                grid_color = (160, 160, 160)
+                
+            crop_gray = cv.cvtColor(crop_display, cv.COLOR_BGR2GRAY)
+            edges = cv.Canny(crop_gray, 50, 150)
+            edges_colored = cv.cvtColor(edges, cv.COLOR_GRAY2BGR)
+            crop_display = cv.addWeighted(crop_display, 0.7, edges_colored, 0.3, 0)
+
+            lores_h, lores_w = lores.shape[:2]
+            crop_x = lores_w - display_crop_size - margin  
+            crop_y = margin 
+            lores[crop_y:crop_y + display_crop_size, crop_x:crop_x + display_crop_size] = crop_display
+
+            # Update canvas and image server only when we have valid frame
+            with self.ui_lock:
+                self.canvas = lores
+                
+            self.image_server.input_image(lores)
+            
+            ### GAIN ADJ
+            
+            if self.is_auto_colors:
+                self.camera.set_auto()
+                self.is_auto_colors = False
+                # means = np.mean(self.camera.capture(0).frame, axis=(0, 1))
+                # mean_r, mean_g, mean_b = means
+# 
+                # cur_red_gain, cur_blue_gain = self.camera._params_latest.colour_gains
+                # corr_r = mean_g / mean_r
+                # corr_b = mean_g / mean_b
+                # target_red_gain = cur_red_gain / corr_r
+                # target_blue_gain = cur_blue_gain / corr_b
+                # 
+                # tolerance = 0.02  
+                # adjustment_rate = 0.05
+                #  
+                # if abs(corr_r - 1.0) > tolerance:
+                #     new_red_gain = cur_red_gain * (1 - adjustment_rate) + target_red_gain * adjustment_rate
+                # else:
+                #     new_red_gain = cur_red_gain
+                #     
+                # if abs(corr_b - 1.0) > tolerance:
+                #     new_blue_gain = cur_blue_gain * (1 - adjustment_rate) + target_blue_gain * adjustment_rate
+                # else:
+                #     new_blue_gain = cur_blue_gain
+                # 
+                # new_red_gain = np.clip(new_red_gain, 0.5, 4.0)
+                # new_blue_gain = np.clip(new_blue_gain, 0.5, 4.0)
+
+                # self.camera.quick_update_colour_gains((new_red_gain, new_blue_gain))
+
+            ###
+            
+        except Exception as e:
+            print(f"Error in make_step: {e}")
+            # Don't update canvas if there's an error, UI will keep using last valid frame
+
+    def update_display_with_canvas(self, canvas):
+        """Update the display with provided canvas"""
+        # Create a copy to avoid modifying the original
+        display_canvas = canvas.copy()
+        
+        for slider in self.sliders: 
+            slider.draw(display_canvas)
+        for button in self.buttons: 
+            button.draw(display_canvas)
+        
+        self.draw_status_info(display_canvas)
+        
+        # Apply rotation if enabled
+        if self.rotate_180:
+            display_canvas = cv.rotate(display_canvas, cv.ROTATE_180)
+        
+        frame_bgra = frame_to_framebuffer_format(display_canvas, self.width, self.height)
+        write_frame_to_fb(frame_bgra, self.fbmap)
 
     def update_display(self):
-        for slider in self.sliders: 
-            slider.draw(self.canvas)
-        for button in self.buttons: 
-            button.draw(self.canvas)
-        
-        self.draw_status_info(self.canvas)
-        
-        frame_bgra = frame_to_framebuffer_format(self.canvas, self.width, self.height)
-        write_frame_to_fb(frame_bgra, self.fbmap)
+        """Update the display with current UI state"""
+        if self.canvas is not None and self.canvas.size > 0:
+            self.update_display_with_canvas(self.canvas)
 
     def cleanup(self):
         try:
@@ -514,6 +670,7 @@ def main():
             print(f"Gallery directory: {app.current_gallery}")
             
             while True:
+                # Camera processing at 30fps
                 time.sleep(1/30)
                 app.make_step()
                 
