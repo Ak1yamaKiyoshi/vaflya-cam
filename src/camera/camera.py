@@ -82,6 +82,12 @@ class Camera:
         else:
             # Camera not started yet, will be set during reconfigure
             pass
+    def disable_auto(self):
+        if self._camera_started:
+            self._cam.set_controls({
+                "AeEnable": False,
+                "AwbEnable": False,
+            })
     
     def update_controls_only(self, controls_dict):
         """Update camera controls without stopping/starting the camera"""
