@@ -1,0 +1,15 @@
+camera
+    $$ Camera srcv2.camera.py
+    resolution = (2028, 1080)
+    auto << cam_ui:set_auto_awb_ae
+
+cam_ui
+    $$ CamUI srcv2.cam_ui.py
+    frame << display:resized_frame
+    original_frame << camera:frame
+
+display
+    $$ Display srcv2.display.py
+    image << cam_ui:ui_frame
+    resize << camera:frame
+
