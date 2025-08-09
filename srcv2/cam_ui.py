@@ -7,12 +7,16 @@ from evdev import ecodes
 import threading 
 import cv2 as cv
 
+from srcv2.camera import CameraParameters
+
 AUTO_AWB_AE_NAME = "AWB AE"
 EDGES_OVERLAY_NAME = "EDGES"
 ZOOM_NAME = "ZOOM"
 RECORDING_NAME = "REC"
 PHOTO_NAME = "PHOTO"
 SHOW_CONTROLS_NAME = "CTL"
+REWIND = "REWIND"
+
 
 ZOOM_SLIDER_NAME = " zoom"
 GAIN_SLIDER_NAME = "gain"
@@ -22,6 +26,7 @@ GAIN_BLUE_SLIDER_NAME = "gain blue"
 
 class CamUI(Node):
     def _init(self, hv_flip=True, width=800, height=480):
+        self._is_auto_setting = False
         self.rotate_180 = hv_flip
         self.width = width
         self.height = height
@@ -34,8 +39,10 @@ class CamUI(Node):
             Button(x=10 + 100  + 70 , y=10, width=70, height=50, text=ZOOM_NAME, color=(200, 200, 200), toggle_mode=True, transparent=True, callback=self.event_emitter, transparent_style=1),
             Button(x=10, y=self.height - 10-50, height=50, width=100, text=RECORDING_NAME, color=(0, 0, 255), toggle_mode=True, transparent=True, callback=self.event_emitter, transparent_style=1),
             Button(x=10+100, y=self.height - 10-50, height=50, width=100, text=PHOTO_NAME, color=(255, 255, 255), toggle_mode=False, transparent=True, callback=self.event_emitter, transparent_style=1),
-            Button(x= 10+100+100, y=self.height - 10-50, height=50, width=100, text=SHOW_CONTROLS_NAME, color=(200, 200, 200), toggle_mode=True, transparent=True, callback=self.event_emitter, transparent_style=1)
+            Button(x= 10+100+100, y=self.height - 10-50, height=50, width=100, text=SHOW_CONTROLS_NAME, color=(200, 200, 200), toggle_mode=True, transparent=True, callback=self.event_emitter, transparent_style=1),
+            Button(x= 10+100+100+100, y=self.height - 10-50, height=50, width=100, text=REWIND, color=(200, 200, 200), toggle_mode=False, transparent=True, callback=self.event_emitter, transparent_style=1)
         ]
+
         self.focus_button = self.buttons[1]
         self.zoom_button = self.buttons[2]
         self.show_controls_button = self.buttons[5]
@@ -51,6 +58,11 @@ class CamUI(Node):
         
         self.zoom_slider = self.sliders[0]
         
+        self.gain_slider = self.sliders[1]
+        self.gain_red_slider = self.sliders[3]
+        self.gain_blue_slider = self.sliders[4]
+        self.shutter_slider = self.sliders[2]
+        
         self.touch_device = find_touch_device()
         self.monitor_thread = threading.Thread(
             daemon=True,
@@ -61,6 +73,15 @@ class CamUI(Node):
         self.frame_received = threading.Event()
         self.monitor_thread.start()
         
+    def set_latest_camera_params(self, val:CameraParameters):
+        params, is_auto = val
+        self._is_auto_setting = is_auto
+        if is_auto:
+            self.gain_slider.set_value(params.gain)
+            self.gain_red_slider.set_value(params.gain_r)
+            self.gain_blue_slider.set_value(params.gain_b)
+            self.shutter_slider.set_value(params.shutter)
+
     def event_emitter(self, name, value=None):
         if name == AUTO_AWB_AE_NAME:
             self._emit("set_auto_awb_ae", value)
@@ -68,12 +89,16 @@ class CamUI(Node):
             self._emit("capture_photo", True)
         if name == RECORDING_NAME:
             self._emit("recording", value)
-        if name == GAIN_SLIDER_NAME:
-            self._emit("ui_new_gain", value)
-        if name == GAIN_BLUE_SLIDER_NAME:
-            self._emit("ui_new_gain_red", value)
-        if name == GAIN_RED_SLIDER_NAME:
-            self._emit("ui_new_gain_red", value)
+
+        if not self._is_auto_setting:
+            if name == GAIN_SLIDER_NAME:
+                self._emit("ui_new_gain", value)
+            if name == GAIN_BLUE_SLIDER_NAME:
+                self._emit("ui_new_gain_blue", value)
+            if name == GAIN_RED_SLIDER_NAME:
+                self._emit("ui_new_gain_red", value)
+            if name == SHUTTER_SLIDER_NAME:
+                self._emit("ui_new_shutter", value)
 
     def map_touch_coordinates(self, touch_x, touch_y, touch_device):
         try:

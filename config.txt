@@ -1,12 +1,21 @@
 camera
     $$ Camera srcv2.camera.py
     resolution = (2028, 1080)
+
     auto << cam_ui:set_auto_awb_ae
+    gain << cam_ui:ui_new_gain
+    shutter << cam_ui:ui_new_shutter
+    gain_red << cam_ui:ui_new_gain_red
+    gain_blue << cam_ui:ui_new_gain_blue
+    take_photo << cam_ui:capture_photo
+
+
 
 cam_ui
     $$ CamUI srcv2.cam_ui.py
     frame << display:resized_frame
     original_frame << camera:frame
+    latest_camera_params << camera:camera_parameters
 
 display
     $$ Display srcv2.display.py
