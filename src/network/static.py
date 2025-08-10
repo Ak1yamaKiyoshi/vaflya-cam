@@ -4,9 +4,11 @@ import threading
 import os
 import time
 
+from aos.node import Node
 
-class StaticHTTPServer:
-    def __init__(self, directory, port=8000):
+
+class StaticHTTPServer(Node):
+    def _init(self, directory, port=8000):
         self.directory = os.path.abspath(directory)
         self.port = port
         self.server_thread = None
@@ -21,6 +23,7 @@ class StaticHTTPServer:
             allow_reuse_address = True
 
         self.httpd = ReuseAddressServer(("", self.port), handler_class)
+        self.start()
 
     def start(self):
         if self.server_thread is not None and self.server_thread.is_alive():

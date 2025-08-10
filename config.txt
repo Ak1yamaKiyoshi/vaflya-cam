@@ -1,14 +1,23 @@
+frame_saver
+    $$ FrameSaver srcv2.saver.py
+    frame << camera:wrapper
+
+
+    photo_event << cam_ui:capture_photo
+    save_rewind << cam_ui:rewind
+    video_start_event << cam_ui:recording_start
+    video_end_event << cam_ui:recording_end
+    
+
 camera
     $$ Camera srcv2.camera.py
-    resolution = (2028, 1080)
+    resolution = (2028*2, 1080*2)
 
     auto << cam_ui:set_auto_awb_ae
     gain << cam_ui:ui_new_gain
     shutter << cam_ui:ui_new_shutter
     gain_red << cam_ui:ui_new_gain_red
     gain_blue << cam_ui:ui_new_gain_blue
-    take_photo << cam_ui:capture_photo
-
 
 
 cam_ui
@@ -17,8 +26,16 @@ cam_ui
     original_frame << camera:frame
     latest_camera_params << camera:camera_parameters
 
+    rewinds_saved << frame_saver:rewinds_saved 
+    photos_taken << frame_saver:photos_taken 
+
+
 display
     $$ Display srcv2.display.py
     image << cam_ui:ui_frame
     resize << camera:frame
+
+http_server:
+    $$ StaticHTTPServer src.network.static.py
+    directory = "./galleries"
 

@@ -4,6 +4,8 @@ import numpy as np
 import cv2 as cv
 from aos.node import Node
 
+import time
+
 fb_device = '/dev/fb0'
 
 def init_framebuffer():
@@ -40,12 +42,17 @@ class Display(Node):
         self.fb, self.fbmap, self.width, self.height, self.bpp, self.frame_size = init_framebuffer()
         self.hv_flip = hv_flip
         
+        self.timestamps = []
+        
     def set_image(self, frame):
         if self.hv_flip:
             frame = cv.rotate(frame, cv.ROTATE_180)
             
         frame_bgra = frame_to_framebuffer_format(frame, self.width, self.height)
         write_frame_to_fb(frame_bgra, self.fbmap)
+        self.timestamps.append(time.monotonic())
+        
+        self.timestamps = [timestamp for timestamp in self.timestamps if time.monotonic() - timestamp < 1 ]
 
     def set_resize(self, frame):
-        self._emit("resized_frame", cv.resize(frame, (self.width, self.height), interpolation=cv.INTER_LANCZOS4))
+        self._emit("resized_frame", cv.resize(frame, (self.width, self.height), interpolation=cv.INTER_NEAREST_EXACT))

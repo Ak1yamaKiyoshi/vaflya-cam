@@ -1,0 +1,2 @@
+zoom slider to bottom right 
+zoom window to right 

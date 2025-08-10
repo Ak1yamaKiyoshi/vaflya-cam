@@ -35,7 +35,7 @@ class CamUtils:
         return microseconds / 1_000_000
 
 
-class FrameList:
+class ReplayBuffer:
     def __init__(self, capacity_seconds=2):
         self._list: List[CameraFrameWrapper] = list()
         self._capacity = capacity_seconds
@@ -48,6 +48,9 @@ class FrameList:
                 to_remove += 1
 
         self._list = self._list[to_remove:]
+
+    def get_frames_last_seconds(self, seconds_ago: float): 
+        return [wrapper for wrapper in self._list if time.monotonic() - wrapper.timestamp < seconds_ago]
 
     def get(self, seconds_ago: float):
         time_errors = []

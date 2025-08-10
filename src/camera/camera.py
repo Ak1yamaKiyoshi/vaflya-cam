@@ -3,7 +3,8 @@ import os
 os.environ["LIBCAMERA_LOG_LEVELS"] = "3"
 
 from .types import CameraFrameWrapper, CameraParameters, RuntimeFrameMetadata
-from .utils import FrameList, Config, CamUtils
+from .utils import ReplayBuffer, Config, CamUtils
+
 
 from libcamera import controls
 
@@ -22,7 +23,7 @@ class Camera:
         self._cam = pc2.Picamera2()
         self._cam.pre_callback = self._on_frame
 
-        self.frames = FrameList(2)
+        self.frames = ReplayBuffer(2)
         
         # Rotation configuration
         self.rotate_180 = rotate_180

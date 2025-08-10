@@ -30,4 +30,3 @@ class CameraFrameWrapper:
     frame: np.ndarray
     metadata: CameraParameters
     timestamp: float
-    runtime_metadata: RuntimeFrameMetadata

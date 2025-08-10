@@ -47,9 +47,9 @@ class CamUI(Node):
         self.zoom_button = self.buttons[2]
         self.show_controls_button = self.buttons[5]
         
-        self.crop_x, self.crop_y = 10, 100
+        self.crop_x, self.crop_y = self.width - 310, 100
         self.sliders = [
-            Slider(x=10 + 100 + 70 + 70 + 10, y=10 + 25 + 10, width=100, min_val=1.0, max_val=10., initial_val=2.0, text=ZOOM_SLIDER_NAME, callback=self.event_emitter),
+            Slider(x=self.width - 200, y=self.height -50, width=150, min_val=1.5, max_val=10., initial_val=2.0, text=ZOOM_SLIDER_NAME, callback=self.event_emitter),
             Slider(x=10, y=self.height -100-  10-50,          width=500, min_val=1.0, max_val=21., initial_val=2.0, text=GAIN_SLIDER_NAME, callback=self.event_emitter),
             Slider(x=10, y=self.height -100-  10-50-50,       width=500, min_val=114, max_val=320_000., initial_val=114, text=SHUTTER_SLIDER_NAME, callback=self.event_emitter),
             Slider(x=10, y=self.height -100-  10-50-50-50,    width=500, min_val=0.5, max_val=7., initial_val=1.0, text=GAIN_BLUE_SLIDER_NAME, callback=self.event_emitter),
@@ -85,19 +85,24 @@ class CamUI(Node):
     def event_emitter(self, name, value=None):
         if name == AUTO_AWB_AE_NAME:
             self._emit("set_auto_awb_ae", value)
-        if name == PHOTO_NAME:
+        elif name == PHOTO_NAME:
             self._emit("capture_photo", True)
-        if name == RECORDING_NAME:
-            self._emit("recording", value)
+        elif name == RECORDING_NAME:
+            if value:
+                self._emit("recording_start", True)
+            else:
+                self._emit("recording_end", True)
+        elif name == REWIND:
+            self._emit("rewind", True)
 
         if not self._is_auto_setting:
             if name == GAIN_SLIDER_NAME:
                 self._emit("ui_new_gain", value)
-            if name == GAIN_BLUE_SLIDER_NAME:
+            elif name == GAIN_BLUE_SLIDER_NAME:
                 self._emit("ui_new_gain_blue", value)
-            if name == GAIN_RED_SLIDER_NAME:
+            elif name == GAIN_RED_SLIDER_NAME:
                 self._emit("ui_new_gain_red", value)
-            if name == SHUTTER_SLIDER_NAME:
+            elif name == SHUTTER_SLIDER_NAME:
                 self._emit("ui_new_shutter", value)
 
     def map_touch_coordinates(self, touch_x, touch_y, touch_device):
@@ -216,3 +221,9 @@ class CamUI(Node):
 
             self._emit("ui_frame", frame)
 
+
+    def set_rewinds_saved(self, amount:int):
+        self.rewinds_saved = amount
+
+    def set_photos_taken(self, amount:int):
+        self.photos_taken = amount
