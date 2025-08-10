@@ -30,6 +30,7 @@ class CameraParameters:
 class Camera(Node):
     def _init(self, 
             resolution: Tuple[int, int],
+            hires_resolution: Tuple[int, int],
             hv_flip = True, debug=False,
               ):
         if not debug:
@@ -39,6 +40,10 @@ class Camera(Node):
         self._latest_frame_meta = CameraParameters(1.0, 114, 1.0, 1.0, resolution)
         self._cam = pc2.Picamera2()
         self._cam.pre_callback = self._frame
+        self.hv_flip = hv_flip
+
+        self.resolution = resolution
+        self.hires_resolution = hires_resolution
 
         if hv_flip:
             cfg = self._cam.create_video_configuration(
@@ -90,6 +95,32 @@ class Camera(Node):
                 "AwbEnable": False,
             })
 
+    def set_switch_camera_mode_to_hires(self, value):
+        self._cam.stop()
+
+
+        if value:
+            if self.hv_flip:
+                cfg = self._cam.create_video_configuration(
+                        main={"size": self.hires_resolution},
+                        transform=libcamera.Transform(hflip=1, vflip=1))
+            else:
+                cfg = self._cam.create_video_configuration(
+                        main={"size": self.hires_resolution})
+                            
+        else:
+            if self.hv_flip:
+                cfg = self._cam.create_video_configuration(
+                        main={"size": self.resolution},
+                        transform=libcamera.Transform(hflip=1, vflip=1))
+            else:
+                cfg = self._cam.create_video_configuration(
+                        main={"size": self.resolution})
+
+        self._cam.configure(cfg)
+        self._cam.start()
+
+
     def _frame(self, request):
         with pc2.MappedArray(request, "main") as m:
             frame = np.array(m.array, copy=False)
@@ -112,4 +143,4 @@ class Camera(Node):
             self._emit("latest_frame_meta", meta_formatted)
             self._emit("frame", frame)
             self._emit("wrapper", CameraFrameWrapper(frame, meta_formatted, time.monotonic()))
-    
+            print(frame.shape)

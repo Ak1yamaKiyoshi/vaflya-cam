@@ -1,6 +1,8 @@
 from aos.node import Node
 from srcv2.ui.button import Button
 from srcv2.ui.slider import Slider
+from srcv2.ui.label import Label
+
 from srcv2.touch import find_touch_device, touch_monitor_thread
 import numpy as np
 from evdev import ecodes
@@ -17,6 +19,8 @@ PHOTO_NAME = "PHOTO"
 SHOW_CONTROLS_NAME = "CTL"
 REWIND = "REWIND"
 
+HIRES = "HIREZ"
+
 
 ZOOM_SLIDER_NAME = " zoom"
 GAIN_SLIDER_NAME = "gain"
@@ -26,6 +30,8 @@ GAIN_BLUE_SLIDER_NAME = "gain blue"
 
 class CamUI(Node):
     def _init(self, hv_flip=True, width=800, height=480):
+        # todo: use dicts not lists 
+        
         self._is_auto_setting = False
         self.rotate_180 = hv_flip
         self.width = width
@@ -40,7 +46,8 @@ class CamUI(Node):
             Button(x=10, y=self.height - 10-50, height=50, width=100, text=RECORDING_NAME, color=(0, 0, 255), toggle_mode=True, transparent=True, callback=self.event_emitter, transparent_style=1),
             Button(x=10+100, y=self.height - 10-50, height=50, width=100, text=PHOTO_NAME, color=(255, 255, 255), toggle_mode=False, transparent=True, callback=self.event_emitter, transparent_style=1),
             Button(x= 10+100+100, y=self.height - 10-50, height=50, width=100, text=SHOW_CONTROLS_NAME, color=(200, 200, 200), toggle_mode=True, transparent=True, callback=self.event_emitter, transparent_style=1),
-            Button(x= 10+100+100+100, y=self.height - 10-50, height=50, width=100, text=REWIND, color=(200, 200, 200), toggle_mode=False, transparent=True, callback=self.event_emitter, transparent_style=1)
+            Button(x= 10+100+100+100, y=self.height - 10-50, height=50, width=100, text=REWIND, color=(200, 200, 200), toggle_mode=False, transparent=True, callback=self.event_emitter, transparent_style=1),
+            Button(x= 10+100+100+100+100, y=self.height - 10-50, height=50, width=100, text=HIRES, color=(200, 200, 200), toggle_mode=True, transparent=True, callback=self.event_emitter, transparent_style=1),
         ]
 
         self.focus_button = self.buttons[1]
@@ -56,6 +63,14 @@ class CamUI(Node):
             Slider(x=10, y=self.height -100-  10-50-50-50-50, width=500, min_val=0.5, max_val=7., initial_val=1.0, text=GAIN_RED_SLIDER_NAME, callback=self.event_emitter),
         ]
         
+        self.labels = [
+            Label(x=self.width-120-30, y=10, width=100, height=50, text="PH: 0", color=(200, 200, 200)),
+            Label(x=self.width-60-30, y=10, width=100, height=50, text="REW: 0", color=(200, 200, 200))
+        ]
+
+        self.photo_saved_label = self.labels[0]
+        self.rewind_saved_label = self.labels[1]
+
         self.zoom_slider = self.sliders[0]
         
         self.gain_slider = self.sliders[1]
@@ -104,6 +119,8 @@ class CamUI(Node):
                 self._emit("ui_new_gain_red", value)
             elif name == SHUTTER_SLIDER_NAME:
                 self._emit("ui_new_shutter", value)
+        if name == HIRES:
+            self._emit("switch_camera_mode_to_hires", value)
 
     def map_touch_coordinates(self, touch_x, touch_y, touch_device):
         try:
@@ -179,6 +196,9 @@ class CamUI(Node):
             for button in self.buttons: 
                 button.draw(frame)
 
+            for label in self.labels:
+                label.draw(frame)
+
             if self.show_controls_button.is_toggled:
                 for slider in self.sliders:
                     slider.draw(frame)
@@ -224,6 +244,8 @@ class CamUI(Node):
 
     def set_rewinds_saved(self, amount:int):
         self.rewinds_saved = amount
+        self.rewind_saved_label.update_text(f"REW: {amount}")
 
     def set_photos_taken(self, amount:int):
         self.photos_taken = amount
+        self.photo_saved_label.update_text(f"PH: {amount}")
