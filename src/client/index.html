@@ -242,7 +242,7 @@
     <div class="container">
         <div class="video-container">
             <div class="video-feed">
-                <iframe id="screen" src=""></iframe>
+                <img id="screen" src="" alt="Camera Feed" style="width: 100%; height: 480px; object-fit: contain; border-radius: 8px;">
             </div>
         </div>
         
@@ -304,8 +304,8 @@
                     id="shutterSpeed1"
                     viewport-width="500" 
                     multiplier="23" 
-                    min-value="0.01" 
-                    max-value="3200000.0" 
+                    min-value="114" 
+                    max-value="128000000.0" 
                     logarithmic="true" 
                     tick-density="128"
                     data-param="exposure_time"></custom-slider>
@@ -332,7 +332,7 @@
             }
             
             const API = {
-                baseUrl: window.location.protocol + '//' + window.location.hostname + ':4500',
+                baseUrl: window.location.protocol + '//' + window.location.hostname + ':8080',
                 videoUrl: window.location.protocol + '//' + window.location.hostname + ':5000/video.mjpg',
                 endpoints: {
                     params: '/params',
@@ -499,6 +499,15 @@
                 }
             }
             
+            async function capturePhoto() {
+                const success = await api.capture();
+                if (success) {
+                    console.log("Photo captured successfully");
+                } else {
+                    console.error("Failed to capture photo");
+                }
+            }
+            
             function setupSliders() {
                 elements.sliders.forEach(slider => {
                     slider.addEventListener("slider-change", (e) => {
@@ -529,7 +538,7 @@
             function init() {
                 initTheme();
                 elements.autoModeBtn.addEventListener("click", toggleAutoMode);
-                elements.capture.addEventListener("click", api.capture);
+                elements.capture.addEventListener("click", capturePhoto);
                 setupSliders();
                 initCameraParameters();
             }

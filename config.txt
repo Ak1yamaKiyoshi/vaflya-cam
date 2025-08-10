@@ -1,13 +1,14 @@
+
 frame_saver
     $$ FrameSaver srcv2.saver.py
     frame << camera:wrapper
 
-
     photo_event << cam_ui:capture_photo
+    photo_event << camera_server:capture
+
     save_rewind << cam_ui:rewind
     video_start_event << cam_ui:recording_start
     video_end_event << cam_ui:recording_end
-    
 
 camera
     $$ Camera srcv2.camera.py
@@ -20,7 +21,26 @@ camera
     gain_red << cam_ui:ui_new_gain_red
     gain_blue << cam_ui:ui_new_gain_blue
 
+    gain << camera_server:gain
+    shutter << camera_server:shutter
+    gain_red << camera_server:gain_red
+    gain_blue << camera_server:gain_blue
+
+
     switch_camera_mode_to_hires << cam_ui:switch_camera_mode_to_hires 
+
+image_server
+    $$ ImageStreamNode srcv2.image_server.py
+    image << camera:frame
+
+camera_server
+    $$ ServerNode srcv2.camera_server.py
+
+    auto << cam_ui:set_auto_awb_ae    
+    gain << camera:gain
+    shutter << camera:shutter
+    gain_red << camera:gain_red
+    gain_blue << camera:gain_blue
 
 
 cam_ui
@@ -32,6 +52,7 @@ cam_ui
     rewinds_saved << frame_saver:rewinds_saved 
     photos_taken << frame_saver:photos_taken 
 
+    isauto << camera_server:setting_parameters
 
 display
     $$ Display srcv2.display.py

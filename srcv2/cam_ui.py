@@ -58,7 +58,7 @@ class CamUI(Node):
         self.sliders = [
             Slider(x=self.width - 200, y=self.height -50, width=150, min_val=1.5, max_val=10., initial_val=2.0, text=ZOOM_SLIDER_NAME, callback=self.event_emitter),
             Slider(x=10, y=self.height -100-  10-50,          width=500, min_val=1.0, max_val=21., initial_val=2.0, text=GAIN_SLIDER_NAME, callback=self.event_emitter),
-            Slider(x=10, y=self.height -100-  10-50-50,       width=500, min_val=114, max_val=320_000., initial_val=114, text=SHUTTER_SLIDER_NAME, callback=self.event_emitter),
+            Slider(x=10, y=self.height -100-  10-50-50,       width=800, min_val=114, max_val=160_000., initial_val=114, text=SHUTTER_SLIDER_NAME, callback=self.event_emitter),
             Slider(x=10, y=self.height -100-  10-50-50-50,    width=500, min_val=0.5, max_val=7., initial_val=1.0, text=GAIN_BLUE_SLIDER_NAME, callback=self.event_emitter),
             Slider(x=10, y=self.height -100-  10-50-50-50-50, width=500, min_val=0.5, max_val=7., initial_val=1.0, text=GAIN_RED_SLIDER_NAME, callback=self.event_emitter),
         ]
@@ -87,6 +87,10 @@ class CamUI(Node):
         self.frame = None
         self.frame_received = threading.Event()
         self.monitor_thread.start()
+        
+    def set_isauto(self, val):
+        self._is_auto_setting = val
+        print("ABOBA")
         
     def set_latest_camera_params(self, val:CameraParameters):
         params, is_auto = val

@@ -46,11 +46,11 @@ class Camera(Node):
         self.hires_resolution = hires_resolution
 
         if hv_flip:
-            cfg = self._cam.create_video_configuration(
+            cfg = self._cam.create_still_configuration(
                     main={"size": resolution},
                     transform=libcamera.Transform(hflip=1, vflip=1))
         else:
-            cfg = self._cam.create_video_configuration(
+            cfg = self._cam.create_still_configuration(
                     main={"size": resolution})
             
         self._cam.configure(cfg)
@@ -139,6 +139,11 @@ class Camera(Node):
             
             self._emit("camera_parameters", [meta_formatted, self._is_auto])
             
+            self._emit("gain", meta_formatted.gain)
+            self._emit("shutter", meta_formatted.shutter)
+            self._emit("gain_red", meta_formatted.gain_r)
+            self._emit("gain_blue", meta_formatted.gain_b)
+
             self._latest_frame_meta = meta_formatted
             self._emit("latest_frame_meta", meta_formatted)
             self._emit("frame", frame)

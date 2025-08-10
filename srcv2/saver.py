@@ -56,6 +56,7 @@ class FrameSaver(Node):
             self.video.put(frame)
 
     def set_photo_event(self, _):
+        print("PHOTO EVENT ")
         frame = self.replay_buffer.get(0.15)
         self.photos.put(frame.frame)
 
